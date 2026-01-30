@@ -1,0 +1,5 @@
+packages:
+  - 'hooks'
+  - 'server'
+  - 'ui'
+  - 'e2e'
