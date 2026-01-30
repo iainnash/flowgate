@@ -44,6 +44,13 @@ enum ToolCategory: String, Codable, CaseIterable {
     }
 }
 
+// Prompt acceptance types
+enum PromptAcceptType: String, Codable {
+    case autoAccept = "auto-accept"
+    case acceptAfter = "accept-after"
+    case manual = "manual"
+}
+
 struct Prompt: Identifiable, Codable {
     let id: String
     let sessionId: String
@@ -52,7 +59,9 @@ struct Prompt: Identifiable, Codable {
     let hookEventName: String
     let cwd: String
     let createdAt: Int  // milliseconds timestamp
-    let autoAcceptIn: Int?  // seconds until auto-accept (if applicable)
+    let acceptType: PromptAcceptType  // How this prompt should be accepted
+    let autoAcceptIn: Int?  // Seconds until auto-accept (only for accept-after type)
+    let autoAcceptAt: Int?  // Unix timestamp (ms) when prompt will auto-accept (server-managed)
 
     var category: ToolCategory {
         ToolCategory.fromToolName(toolName)

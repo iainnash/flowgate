@@ -4,8 +4,10 @@ import Starscream
 enum WSMessage {
     case promptNew(Prompt)
     case promptResolved(id: String, autoAccepted: Bool)
+    case promptUpdated(Prompt)
     case promptsList([Prompt])
     case settingsUpdated(ServerSettings)
+    case pauseChanged(Bool)
     case connected
     case disconnected(Error?)
 }
@@ -94,6 +96,12 @@ class WebSocketClient: NSObject, ObservableObject {
                     delegate?.webSocketDidReceive(.promptResolved(id: id, autoAccepted: autoAccepted))
                 }
 
+            case "prompt:updated":
+                if let promptData = json?["prompt"] as? [String: Any] {
+                    let prompt = try parsePrompt(promptData)
+                    delegate?.webSocketDidReceive(.promptUpdated(prompt))
+                }
+
             case "prompts:list":
                 if let promptsData = json?["prompts"] as? [[String: Any]] {
                     let prompts = try promptsData.map { try parsePrompt($0) }
@@ -105,6 +113,11 @@ class WebSocketClient: NSObject, ObservableObject {
                     let settingsJSON = try JSONSerialization.data(withJSONObject: settingsData)
                     let settings = try JSONDecoder().decode(ServerSettings.self, from: settingsJSON)
                     delegate?.webSocketDidReceive(.settingsUpdated(settings))
+                }
+
+            case "pause:changed":
+                if let isPaused = json?["isPaused"] as? Bool {
+                    delegate?.webSocketDidReceive(.pauseChanged(isPaused))
                 }
 
             default:

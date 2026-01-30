@@ -273,7 +273,6 @@
     flex: 1;
     padding-right: 12px;
     white-space: pre;
-    overflow-x: auto;
   }
 
   .fallback {

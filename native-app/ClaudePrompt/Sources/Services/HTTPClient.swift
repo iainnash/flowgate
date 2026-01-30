@@ -80,6 +80,23 @@ class HTTPClient {
         }
     }
 
+    func togglePauseAll() async throws -> Bool {
+        let url = baseURL.appendingPathComponent("api/pause")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw HTTPError.requestFailed
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return json?["isPaused"] as? Bool ?? false
+    }
+
     func checkServerHealth() async -> Bool {
         let url = baseURL.appendingPathComponent("api/prompts")
         do {

@@ -144,21 +144,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observeNewPrompts() {
-        var previousCount = promptManager.promptCount
+        var previousPromptIds = Set(promptManager.prompts.map { $0.id })
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
-                let currentCount = self.promptManager.promptCount
+                let currentPrompts = self.promptManager.prompts
+                let currentIds = Set(currentPrompts.map { $0.id })
 
-                // Show window and float when new prompts arrive
-                if currentCount > previousCount && currentCount > 0 {
-                    self.showFloatingWindow()
+                // Find new prompts
+                let newIds = currentIds.subtracting(previousPromptIds)
+                if !newIds.isEmpty {
+                    let newPrompts = currentPrompts.filter { newIds.contains($0.id) }
+                    self.handleNewPrompts(newPrompts)
                 }
 
                 // Update window level based on prompt count
                 self.updateWindowLevel()
 
-                previousCount = currentCount
+                previousPromptIds = currentIds
+            }
+        }
+    }
+
+    private func handleNewPrompts(_ newPrompts: [Prompt]) {
+        let focusMode = settingsManager.settings.native.focusStealMode
+
+        switch focusMode {
+        case .never:
+            // Don't show window at all
+            return
+
+        case .always:
+            // Show window for any new prompt
+            showFloatingWindow()
+
+        case .confirmationNeeded:
+            // Only show window if any new prompt requires manual approval (no autoAcceptIn)
+            let hasManualPrompt = newPrompts.contains { $0.autoAcceptIn == nil }
+            if hasManualPrompt {
+                showFloatingWindow()
             }
         }
     }
@@ -205,6 +229,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        hotkeyManager.onPauseAll = { [weak self] in
+            Task { @MainActor in
+                self?.promptManager.togglePauseAll()
+            }
+        }
+
         hotkeyManager.setup(config: settingsManager.settings.native.globalHotkeys)
     }
 
@@ -221,30 +251,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showFloatingWindow() {
         guard let window = floatingWindow else { return }
 
-        // Start transparent
-        window.alphaValue = 0
+        let animationsEnabled = settingsManager.settings.native.enableAnimations
 
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if animationsEnabled {
+            // Start transparent
+            window.alphaValue = 0
 
-        // Fade in
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            window.animator().alphaValue = 1
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+
+            // Fade in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                window.animator().alphaValue = 1
+            }
+        } else {
+            // No animation
+            window.alphaValue = 1
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     private func hideFloatingWindow() {
         guard let window = floatingWindow else { return }
 
-        // Fade out
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.15
-            window.animator().alphaValue = 0
-        }, completionHandler: {
+        let animationsEnabled = settingsManager.settings.native.enableAnimations
+
+        if animationsEnabled {
+            // Fade out
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.15
+                window.animator().alphaValue = 0
+            }, completionHandler: {
+                window.orderOut(nil)
+                window.alphaValue = 1  // Reset for next show
+            })
+        } else {
+            // No animation
             window.orderOut(nil)
-            window.alphaValue = 1  // Reset for next show
-        })
+        }
     }
 
     private func toggleFloatingWindow() {
@@ -258,7 +304,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateMenuBarBadge() {
         guard let button = statusItem.button else { return }
 
-        let count = promptManager.promptCount
+        // Only count manual prompts (non-auto-accept) for badge
+        let count = promptManager.manualPromptCount
 
         if count > 0 {
             // Create composite image with badge

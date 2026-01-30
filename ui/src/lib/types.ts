@@ -1,3 +1,6 @@
+// Prompt acceptance types
+export type PromptAcceptType = 'auto-accept' | 'accept-after' | 'manual';
+
 export interface Prompt {
   id: string;
   sessionId: string;
@@ -6,6 +9,9 @@ export interface Prompt {
   hookEventName: string;
   cwd: string;
   createdAt: number;
+  acceptType: PromptAcceptType;  // How this prompt should be accepted
+  autoAcceptIn?: number;  // Seconds until auto-accept (only for accept-after type)
+  autoAcceptAt?: number;  // Unix timestamp (ms) when prompt will auto-accept (server-managed)
 }
 
 // AskUserQuestion tool input structure
@@ -111,8 +117,10 @@ export interface Decision {
 export type WsMessage =
   | { type: 'prompt:new'; prompt: Prompt }
   | { type: 'prompt:resolved'; id: string; autoAccepted?: boolean }
+  | { type: 'prompt:updated'; prompt: Prompt }
   | { type: 'settings:updated'; settings: Settings }
-  | { type: 'prompts:list'; prompts: Prompt[] };
+  | { type: 'prompts:list'; prompts: Prompt[] }
+  | { type: 'pause:changed'; isPaused: boolean };
 
 export const CODE_CHANGE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 

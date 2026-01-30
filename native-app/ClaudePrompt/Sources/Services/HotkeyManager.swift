@@ -8,11 +8,13 @@ class HotkeyManager: ObservableObject {
     private var denyHotKey: HotKey?
     private var otherHotKey: HotKey?
     private var toggleHotKey: HotKey?
+    private var pauseAllHotKey: HotKey?
 
     var onAccept: (@Sendable () -> Void)?
     var onDeny: (@Sendable () -> Void)?
     var onOther: (@Sendable () -> Void)?
     var onToggle: (@Sendable () -> Void)?
+    var onPauseAll: (@Sendable () -> Void)?
 
     func setup(config: HotkeyConfig) {
         // Clear existing hotkeys
@@ -20,6 +22,7 @@ class HotkeyManager: ObservableObject {
         denyHotKey = nil
         otherHotKey = nil
         toggleHotKey = nil
+        pauseAllHotKey = nil
 
         // Set up new hotkeys
         if let (key, modifiers) = parseHotkey(config.accept) {
@@ -47,6 +50,13 @@ class HotkeyManager: ObservableObject {
             toggleHotKey = HotKey(key: key, modifiers: modifiers)
             toggleHotKey?.keyDownHandler = { [weak self] in
                 self?.onToggle?()
+            }
+        }
+
+        if let (key, modifiers) = parseHotkey(config.pauseAll) {
+            pauseAllHotKey = HotKey(key: key, modifiers: modifiers)
+            pauseAllHotKey?.keyDownHandler = { [weak self] in
+                self?.onPauseAll?()
             }
         }
     }

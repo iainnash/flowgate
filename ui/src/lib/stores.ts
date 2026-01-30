@@ -334,11 +334,20 @@ function handleMessage(message: WsMessage): void {
         removePrompt(message.id);
       }
       break;
+    case 'prompt:updated':
+      // Update prompt in place (e.g., when autoAcceptAt changes after resume)
+      prompts.update((list) =>
+        list.map((p) => (p.id === message.prompt.id ? message.prompt : p))
+      );
+      break;
     case 'prompts:list':
       prompts.set(message.prompts);
       break;
     case 'settings:updated':
       settings.set(message.settings);
+      break;
+    case 'pause:changed':
+      globalPaused.set(message.isPaused);
       break;
   }
 }
@@ -525,6 +534,9 @@ function getPromptDescription(prompt: Prompt): string {
 export const deviceConnected = writable(false);
 export const deviceStatus = writable<DevicesResponse>({ devices: [], hasConnectedDevice: false });
 
+// Global pause state (false = playing/auto-accept enabled, true = paused)
+export const globalPaused = writable(false);
+
 let devicePollInterval: ReturnType<typeof setInterval> | null = null;
 
 export async function fetchDeviceStatus(): Promise<void> {
@@ -580,5 +592,11 @@ export async function saveSettings(newSettings: Settings): Promise<void> {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(newSettings),
+  });
+}
+
+export async function togglePauseAll(): Promise<void> {
+  await fetch(`${API_BASE}/pause`, {
+    method: 'POST',
   });
 }

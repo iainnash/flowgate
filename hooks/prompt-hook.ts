@@ -51,6 +51,16 @@ function fallbackToTerminal(reason: string): void {
   });
 }
 
+function silentPassthrough(): void {
+  // When server is down, silently allow the tool to proceed
+  output({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+    },
+  });
+}
+
 async function main(): Promise<void> {
   let inputJson: string;
 
@@ -103,10 +113,8 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     clearTimeout(timeoutId);
-    const message = err instanceof Error && err.name === 'AbortError'
-      ? 'Request timeout - UI server not responding'
-      : `Server unreachable: ${err}`;
-    fallbackToTerminal(message);
+    // Server is down or unreachable - silently allow to avoid blocking Claude Code
+    silentPassthrough();
   }
 }
 

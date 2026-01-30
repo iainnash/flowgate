@@ -17,6 +17,9 @@ export interface Decision {
   updatedInput?: Record<string, unknown>;
 }
 
+// Prompt acceptance types
+export type PromptAcceptType = 'auto-accept' | 'accept-after' | 'manual';
+
 // Internal prompt representation
 export interface Prompt {
   id: string;
@@ -26,7 +29,9 @@ export interface Prompt {
   hookEventName: string;
   cwd: string;
   createdAt: number;
-  autoAcceptIn?: number;  // Seconds until auto-accept (if applicable)
+  acceptType: PromptAcceptType;  // How this prompt should be accepted
+  autoAcceptIn?: number;  // Seconds until auto-accept (only for accept-after type)
+  autoAcceptAt?: number;  // Unix timestamp (ms) when prompt will auto-accept (server-managed, synced to clients)
 }
 
 // Prompt with resolver for pending requests
@@ -120,8 +125,10 @@ export function getToolCategory(toolName: string): ToolCategory {
 export type WsMessage =
   | { type: 'prompt:new'; prompt: Prompt }
   | { type: 'prompt:resolved'; id: string; autoAccepted?: boolean }
+  | { type: 'prompt:updated'; prompt: Prompt }  // For timer updates (e.g., after resume from pause)
   | { type: 'settings:updated'; settings: Settings }
-  | { type: 'prompts:list'; prompts: Prompt[] };
+  | { type: 'prompts:list'; prompts: Prompt[] }
+  | { type: 'pause:changed'; isPaused: boolean };
 
 // Code change tools that require explicit approval
 export const CODE_CHANGE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);

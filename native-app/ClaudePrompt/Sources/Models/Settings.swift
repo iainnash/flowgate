@@ -74,17 +74,34 @@ struct HotkeyConfig: Codable {
     var deny: String
     var other: String
     var toggle: String
+    var pauseAll: String
 
     init(
         accept: String = "cmd+shift+y",
         deny: String = "cmd+shift+n",
         other: String = "cmd+shift+o",
-        toggle: String = "cmd+shift+p"
+        toggle: String = "cmd+shift+p",
+        pauseAll: String = "cmd+shift+space"
     ) {
         self.accept = accept
         self.deny = deny
         self.other = other
         self.toggle = toggle
+        self.pauseAll = pauseAll
+    }
+}
+
+enum FocusStealMode: String, Codable, CaseIterable {
+    case confirmationNeeded = "confirmation"  // Only steal focus for manual approval prompts
+    case always = "always"                    // Steal focus for all prompts including auto-accept
+    case never = "never"                      // Never steal focus
+
+    var displayName: String {
+        switch self {
+        case .confirmationNeeded: return "Manual approval only"
+        case .always: return "All prompts"
+        case .never: return "Never"
+        }
     }
 }
 
@@ -93,17 +110,26 @@ struct NativeSettings: Codable {
     var showInMenuBar: Bool
     var launchAtLogin: Bool
     var globalHotkeys: HotkeyConfig
+    var focusStealMode: FocusStealMode
+    var showAutoAccept: Bool
+    var enableAnimations: Bool
 
     init(
         floatingWindow: Bool = true,
         showInMenuBar: Bool = true,
         launchAtLogin: Bool = false,
-        globalHotkeys: HotkeyConfig = HotkeyConfig()
+        globalHotkeys: HotkeyConfig = HotkeyConfig(),
+        focusStealMode: FocusStealMode = .confirmationNeeded,
+        showAutoAccept: Bool = true,
+        enableAnimations: Bool = true
     ) {
         self.floatingWindow = floatingWindow
         self.showInMenuBar = showInMenuBar
         self.launchAtLogin = launchAtLogin
         self.globalHotkeys = globalHotkeys
+        self.focusStealMode = focusStealMode
+        self.showAutoAccept = showAutoAccept
+        self.enableAnimations = enableAnimations
     }
 }
 

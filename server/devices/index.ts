@@ -10,6 +10,7 @@ export class DeviceManager {
   private plugins: InputDevicePlugin[] = [];
   private resolveCallback?: (id: string, decision: Decision) => void;
   private resolveAllCallback?: (decision: 'allow' | 'deny') => void;
+  private togglePauseAllCallback?: () => void;
 
   /**
    * Set the callbacks for prompt resolution.
@@ -18,14 +19,17 @@ export class DeviceManager {
   setCallbacks(callbacks: {
     onResolve: (id: string, decision: Decision) => void;
     onResolveAll: (decision: 'allow' | 'deny') => void;
+    onTogglePauseAll: () => void;
   }): void {
     this.resolveCallback = callbacks.onResolve;
     this.resolveAllCallback = callbacks.onResolveAll;
+    this.togglePauseAllCallback = callbacks.onTogglePauseAll;
 
     // Update existing plugins
     for (const plugin of this.plugins) {
       plugin.onResolve = callbacks.onResolve;
       plugin.onResolveAll = callbacks.onResolveAll;
+      plugin.onTogglePauseAll = callbacks.onTogglePauseAll;
     }
   }
 
@@ -33,9 +37,10 @@ export class DeviceManager {
    * Register a device plugin.
    */
   register(plugin: InputDevicePlugin): void {
-    if (this.resolveCallback && this.resolveAllCallback) {
+    if (this.resolveCallback && this.resolveAllCallback && this.togglePauseAllCallback) {
       plugin.onResolve = this.resolveCallback;
       plugin.onResolveAll = this.resolveAllCallback;
+      plugin.onTogglePauseAll = this.togglePauseAllCallback;
     }
     this.plugins.push(plugin);
   }
@@ -92,6 +97,19 @@ export class DeviceManager {
         plugin.onPromptResolved(id);
       } catch (err) {
         console.error(`[DeviceManager] Error in ${plugin.name}.onPromptResolved:`, err);
+      }
+    }
+  }
+
+  /**
+   * Notify all plugins of pause state change.
+   */
+  onPauseStateChanged(isPaused: boolean): void {
+    for (const plugin of this.plugins) {
+      try {
+        plugin.onPauseStateChanged(isPaused);
+      } catch (err) {
+        console.error(`[DeviceManager] Error in ${plugin.name}.onPauseStateChanged:`, err);
       }
     }
   }

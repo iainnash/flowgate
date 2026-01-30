@@ -8,8 +8,12 @@ struct SettingsView: View {
     @State private var denyKey: String
     @State private var otherKey: String
     @State private var toggleKey: String
+    @State private var pauseAllKey: String
     @State private var floatingWindow: Bool
     @State private var showInMenuBar: Bool
+    @State private var focusStealMode: FocusStealMode
+    @State private var showAutoAccept: Bool
+    @State private var enableAnimations: Bool
 
     init(settingsManager: SettingsManager) {
         self.settingsManager = settingsManager
@@ -18,8 +22,12 @@ struct SettingsView: View {
         _denyKey = State(initialValue: settings.native.globalHotkeys.deny)
         _otherKey = State(initialValue: settings.native.globalHotkeys.other)
         _toggleKey = State(initialValue: settings.native.globalHotkeys.toggle)
+        _pauseAllKey = State(initialValue: settings.native.globalHotkeys.pauseAll)
         _floatingWindow = State(initialValue: settings.native.floatingWindow)
         _showInMenuBar = State(initialValue: settings.native.showInMenuBar)
+        _focusStealMode = State(initialValue: settings.native.focusStealMode)
+        _showAutoAccept = State(initialValue: settings.native.showAutoAccept)
+        _enableAnimations = State(initialValue: settings.native.enableAnimations)
     }
 
     var body: some View {
@@ -74,6 +82,15 @@ struct SettingsView: View {
                         Text("Toggle window")
                         Spacer()
                         TextField("", text: $toggleKey)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 120)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    HStack {
+                        Text("Pause/Play all")
+                        Spacer()
+                        TextField("", text: $pauseAllKey)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 120)
                             .multilineTextAlignment(.center)
@@ -139,6 +156,16 @@ struct SettingsView: View {
                 Section("Window") {
                     Toggle("Float on top", isOn: $floatingWindow)
                     Toggle("Show in menu bar", isOn: $showInMenuBar)
+
+                    Picker("Steal focus", selection: $focusStealMode) {
+                        ForEach(FocusStealMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Toggle("Show auto-accept prompts", isOn: $showAutoAccept)
+                    Toggle("Enable animations", isOn: $enableAnimations)
                 }
 
                 Section("Server") {
@@ -166,8 +193,12 @@ struct SettingsView: View {
         settingsManager.settings.native.globalHotkeys.deny = denyKey
         settingsManager.settings.native.globalHotkeys.other = otherKey
         settingsManager.settings.native.globalHotkeys.toggle = toggleKey
+        settingsManager.settings.native.globalHotkeys.pauseAll = pauseAllKey
         settingsManager.settings.native.floatingWindow = floatingWindow
         settingsManager.settings.native.showInMenuBar = showInMenuBar
+        settingsManager.settings.native.focusStealMode = focusStealMode
+        settingsManager.settings.native.showAutoAccept = showAutoAccept
+        settingsManager.settings.native.enableAnimations = enableAnimations
         settingsManager.saveToFile()
     }
 }

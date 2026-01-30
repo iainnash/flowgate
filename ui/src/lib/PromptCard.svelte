@@ -3,24 +3,27 @@
   import CountdownButton from './CountdownButton.svelte';
   import OtherModal from './OtherModal.svelte';
   import CodeDiff from './CodeDiff.svelte';
-  import { resolvePrompt, getSessionColor, settings, findMatchingRule, autoAccepted, deviceConnected, prompts, getPromptDisplayIndex } from './stores';
-  import type { Prompt, RuleAction } from './types';
+  import { resolvePrompt, getSessionColor, autoAccepted, deviceConnected, prompts, getPromptDisplayIndex, globalPaused } from './stores';
+  import type { Prompt } from './types';
   import { isCodeChange } from './types';
 
   export let prompt: Prompt;
 
-  let countdown = 0;
+  let countdown = 0;  // 0-100 percentage
+  let remainingSeconds = 0;
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let showModal = false;
   let expanded = false;
 
   $: sessionColor = getSessionColor(prompt.sessionId);
-  $: matchingRule = findMatchingRule($settings, prompt.toolName, prompt.cwd);
-  $: action = matchingRule?.action ?? { type: 'require-verify' } as RuleAction;
-  $: shouldAutoAccept = action.type === 'auto-accept' || action.type === 'accept-after';
-  $: timeoutMs = action.type === 'accept-after' ? action.seconds * 1000 : 0;
+  // Use server-provided acceptType
+  $: isImmediateAutoAccept = prompt.acceptType === 'auto-accept';
+  $: isAcceptAfter = prompt.acceptType === 'accept-after';
+  $: isManual = prompt.acceptType === 'manual';
+  $: shouldAutoAccept = isImmediateAutoAccept || isAcceptAfter;
   $: isAutoAccepted = $autoAccepted.has(prompt.id);
   $: displayIndex = $deviceConnected ? getPromptDisplayIndex(prompt.id, $prompts) : undefined;
+  $: isPaused = isAcceptAfter && prompt.autoAcceptAt === undefined;
 
   $: description = getDescription(prompt.toolInput);
 
@@ -47,18 +50,23 @@
   }
 
   onMount(() => {
-    if (shouldAutoAccept && timeoutMs > 0) {
-      const startTime = prompt.createdAt;
-      const updateCountdown = () => {
-        const elapsed = Date.now() - startTime;
-        countdown = Math.min(100, (elapsed / timeoutMs) * 100);
-        if (countdown >= 100) {
-          clearInterval(intervalId!);
-        }
-      };
-      updateCountdown();
-      intervalId = setInterval(updateCountdown, 100);
-    }
+    // Update countdown based on server-provided autoAcceptAt
+    const updateCountdown = () => {
+      if (prompt.autoAcceptAt && prompt.autoAcceptIn && prompt.autoAcceptIn > 0) {
+        const now = Date.now();
+        const remaining = Math.max(0, prompt.autoAcceptAt - now);
+        const totalMs = prompt.autoAcceptIn * 1000;
+        const elapsed = totalMs - remaining;
+        countdown = Math.min(100, (elapsed / totalMs) * 100);
+        remainingSeconds = Math.ceil(remaining / 1000);
+      } else if (prompt.autoAcceptIn !== undefined && prompt.autoAcceptIn > 0) {
+        // Paused - show last known remaining time or full time
+        remainingSeconds = prompt.autoAcceptIn;
+        // Keep countdown at whatever it was
+      }
+    };
+    updateCountdown();
+    intervalId = setInterval(updateCountdown, 100);
   });
 
   onDestroy(() => {
@@ -114,25 +122,28 @@
     {/if}
   </button>
 
-  <div class="actions">
-    <CountdownButton
-      label="Yes"
-      variant="yes"
-      countdown={shouldAutoAccept ? countdown : 0}
-      pulse={!shouldAutoAccept}
-      on:click={handleYes}
-    />
-    <CountdownButton label="No" variant="no" on:click={handleNo} />
-    <CountdownButton label="Other" variant="other" on:click={handleOther} />
-  </div>
+  {#if !isImmediateAutoAccept}
+    <div class="actions">
+      <CountdownButton
+        label="Yes"
+        variant="yes"
+        countdown={isAcceptAfter ? countdown : 0}
+        pulse={isManual}
+        on:click={handleYes}
+      />
+      <CountdownButton label="No" variant="no" on:click={handleNo} />
+      <CountdownButton label="Other" variant="other" on:click={handleOther} />
+    </div>
+  {/if}
 
   {#if isAutoAccepted}
     <div class="countdown-label accepted">Auto-accepted</div>
-  {:else if action.type === 'accept-after' && timeoutMs > 0}
-    <div class="countdown-label" data-testid="countdown">
-      {Math.max(0, Math.ceil((action.seconds * (100 - countdown)) / 100))}s
+  {:else if isAcceptAfter}
+    <div class="countdown-label" class:paused={isPaused} data-testid="countdown">
+      {remainingSeconds}s
+      {#if isPaused}(paused){/if}
     </div>
-  {:else if action.type === 'auto-accept'}
+  {:else if isImmediateAutoAccept}
     <div class="countdown-label auto">Auto-accepting...</div>
   {:else}
     <div class="countdown-label muted">Manual approval</div>
@@ -251,6 +262,10 @@
   .countdown-label.muted {
     color: var(--text-muted, #555);
     font-style: italic;
+  }
+
+  .countdown-label.paused {
+    color: #f97316;
   }
 
   .countdown-label.auto {

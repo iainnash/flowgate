@@ -40,7 +40,7 @@ type StreamDeckDevice = {
  * ├─────┼─────┼─────┼─────┼─────┤
  * │ 1-N │ 2-N │ 3-N │ 4-N │     │  ← Row 1: No (middle global TBD)
  * ├─────┼─────┼─────┼─────┼─────┤
- * │ 1-O │ 2-O │ 3-O │ 4-O │ NO  │  ← Row 2: Other (global = deny all)
+ * │ 1-O │ 2-O │ 3-O │ 4-O │PAUSE│  ← Row 2: Other (global = pause/play toggle)
  * └─────┴─────┴─────┴─────┴─────┘
  *   #1    #2    #3    #4   Global
  */
@@ -52,9 +52,11 @@ export class StreamDeckPlugin implements InputDevicePlugin {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _isConnected = false;
   private iconSize = 72; // Default icon size for most Stream Decks
+  private _isPaused = false;
 
   onResolve: (id: string, decision: Decision) => void = () => {};
   onResolveAll: (decision: 'allow' | 'deny') => void = () => {};
+  onTogglePauseAll: () => void = () => {};
 
   async init(): Promise<void> {
     await this.connect();
@@ -72,6 +74,11 @@ export class StreamDeckPlugin implements InputDevicePlugin {
 
   onPromptResolved(_id: string): void {
     // Display will be updated when onPromptsChanged is called
+  }
+
+  onPauseStateChanged(isPaused: boolean): void {
+    this._isPaused = isPaused;
+    this.updateDisplay();
   }
 
   isConnected(): boolean {
@@ -197,7 +204,9 @@ export class StreamDeckPlugin implements InputDevicePlugin {
   }
 
   /**
-   * Map prompts to display slots (1-4)
+   * Map prompts to display slots (1-4).
+   * Shows all prompts - even those with auto-accept timers need user attention
+   * (they can still be manually approved/denied before the timer expires).
    */
   private getPromptSlots(): PromptSlot[] {
     return this.prompts.slice(0, STREAMDECK_LAYOUT.PROMPT_SLOTS).map((prompt, i) => ({
@@ -259,8 +268,8 @@ export class StreamDeckPlugin implements InputDevicePlugin {
       case L.OTHER_4:
         this.resolveSlot(slots, 3, 'deny', 'Other action from Stream Deck');
         break;
-      case L.NO_ALL:
-        this.onResolveAll('deny');
+      case L.PAUSE_PLAY:
+        this.onTogglePauseAll();
         break;
     }
   }
@@ -348,12 +357,12 @@ export class StreamDeckPlugin implements InputDevicePlugin {
         BUTTON_COLORS.EMPTY
       ));
 
-      // Deny All button (bottom-right)
-      await this.setButtonImage(L.NO_ALL, this.createButtonImage(
-        'ALL',
-        'NO',
+      // Pause/Play toggle button (bottom-right)
+      await this.setButtonImage(L.PAUSE_PLAY, this.createButtonImage(
         '',
-        hasPrompts ? BUTTON_COLORS.GLOBAL_NO : BUTTON_COLORS.EMPTY
+        this._isPaused ? 'PLAY' : 'PAUSE',
+        '',
+        this._isPaused ? BUTTON_COLORS.PLAY : BUTTON_COLORS.PAUSE
       ));
     } catch (err) {
       console.error('[StreamDeck] Failed to update display:', err);
@@ -413,6 +422,8 @@ export class StreamDeckPlugin implements InputDevicePlugin {
       'S': [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110],
       'N': [0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001],
       'O': [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
+      'P': [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000],
+      'U': [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
       '.': [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100],
     };
 

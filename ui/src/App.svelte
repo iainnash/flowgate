@@ -12,8 +12,25 @@
     updateVolume,
     startDevicePolling,
     deviceConnected,
+    globalPaused,
+    togglePauseAll,
   } from './lib/stores';
   import { isUserPrompt, isExitPlanMode } from './lib/types';
+  import type { Prompt } from './lib/types';
+
+  // Sort prompts: manual (no autoAcceptIn) first, auto-accept last
+  function sortPrompts(prompts: Prompt[]): Prompt[] {
+    return [...prompts].sort((a, b) => {
+      const aIsManual = !('autoAcceptIn' in a) || a.autoAcceptIn === undefined;
+      const bIsManual = !('autoAcceptIn' in b) || b.autoAcceptIn === undefined;
+      if (aIsManual !== bIsManual) {
+        return aIsManual ? -1 : 1; // Manual prompts come first
+      }
+      return a.createdAt - b.createdAt; // Then by creation time
+    });
+  }
+
+  $: sortedPrompts = sortPrompts($prompts);
   import ExitPlanModeCard from './lib/ExitPlanModeCard.svelte';
 
   let showSettings = false;
@@ -89,6 +106,18 @@
           class="volume-slider"
         />
       </div>
+      <button class="icon-btn pause-btn" class:paused={$globalPaused} on:click={togglePauseAll} title={$globalPaused ? 'Resume auto-accept' : 'Pause auto-accept'}>
+        {#if $globalPaused}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+        {:else}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        {/if}
+      </button>
       <button class="icon-btn" on:click={toggleTheme} title="Toggle theme">
         {#if $settings.ui.theme === 'dark'}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -133,7 +162,7 @@
         <p class="hint">Prompts from Claude Code will appear here</p>
       </div>
     {:else}
-      {#each $prompts as prompt (prompt.id)}
+      {#each sortedPrompts as prompt (prompt.id)}
         {#if isUserPrompt(prompt)}
           <UserPromptCard {prompt} />
         {:else if isExitPlanMode(prompt)}
@@ -228,6 +257,14 @@
   .icon-btn:hover {
     background: var(--hover-bg, #333);
     color: var(--text-primary, #eee);
+  }
+
+  .pause-btn {
+    color: #22c55e;
+  }
+
+  .pause-btn.paused {
+    color: #f97316;
   }
 
   .status {

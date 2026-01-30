@@ -26,6 +26,12 @@ export interface InputDevicePlugin {
   /** Callback to resolve all pending prompts with allow/deny */
   onResolveAll: (decision: 'allow' | 'deny') => void;
 
+  /** Callback to toggle pause state for all prompts */
+  onTogglePauseAll: () => void;
+
+  /** Called when global pause state changes */
+  onPauseStateChanged(isPaused: boolean): void;
+
   /** Whether the device is currently connected */
   isConnected(): boolean;
 }
@@ -53,7 +59,7 @@ export interface PromptSlot {
  *
  * Row 0: Yes buttons (1-Y, 2-Y, 3-Y, 4-Y, ALL-Y)
  * Row 1: No buttons  (1-N, 2-N, 3-N, 4-N, empty)
- * Row 2: Other btns  (1-O, 2-O, 3-O, 4-O, ALL-N)
+ * Row 2: Other btns  (1-O, 2-O, 3-O, 4-O, PAUSE/PLAY)
  *
  * Column mapping:
  * - Columns 0-3: Prompt slots 1-4
@@ -84,7 +90,7 @@ export const STREAMDECK_LAYOUT = {
   OTHER_2: 11,
   OTHER_3: 12,
   OTHER_4: 13,
-  NO_ALL: 14,
+  PAUSE_PLAY: 14,
 } as const;
 
 /**
@@ -98,4 +104,6 @@ export const BUTTON_COLORS = {
   PENDING: [60, 60, 80] as const,   // Lighter gray for pending
   GLOBAL_YES: [22, 163, 74] as const,  // Darker green
   GLOBAL_NO: [185, 28, 28] as const,   // Darker red
+  PAUSE: [249, 115, 22] as const,   // Orange for pause
+  PLAY: [34, 197, 94] as const,     // Green for play (resume)
 } as const;

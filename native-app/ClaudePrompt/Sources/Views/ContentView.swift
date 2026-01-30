@@ -8,7 +8,17 @@ struct ContentView: View {
     @State private var selectedPromptForOther: Prompt?
     @State private var otherReason = ""
     @State private var selectedIndex: Int = 0
-    @State private var pausedPromptIds: Set<String> = []
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    // Filter prompts based on showAutoAccept setting
+    var filteredPrompts: [Prompt] {
+        let sorted = promptManager.sortedPrompts
+        if settingsManager.settings.native.showAutoAccept {
+            return sorted
+        } else {
+            return sorted.filter { $0.acceptType == .manual }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,7 +28,7 @@ struct ContentView: View {
             Divider()
 
             // Prompt list or empty state
-            if promptManager.prompts.isEmpty {
+            if filteredPrompts.isEmpty {
                 emptyStateView
             } else {
                 promptListView
@@ -88,21 +98,13 @@ struct ContentView: View {
     private func selectNext() {
         if selectedIndex < promptManager.prompts.count - 1 {
             selectedIndex += 1
-            pauseSelectedPrompt()
         }
     }
 
     private func selectPrevious() {
         if selectedIndex > 0 {
             selectedIndex -= 1
-            pauseSelectedPrompt()
         }
-    }
-
-    private func pauseSelectedPrompt() {
-        guard selectedIndex < promptManager.prompts.count else { return }
-        let prompt = promptManager.prompts[selectedIndex]
-        pausedPromptIds.insert(prompt.id)
     }
 
     private func acceptSelected() {
@@ -147,6 +149,17 @@ struct ContentView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
+
+            // Pause/Play toggle button
+            Button {
+                promptManager.togglePauseAll()
+            } label: {
+                Image(systemName: promptManager.isPaused ? "play.fill" : "pause.fill")
+                    .font(.title3)
+                    .foregroundColor(promptManager.isPaused ? .orange : .green)
+            }
+            .buttonStyle(.borderless)
+            .help(promptManager.isPaused ? "Resume auto-accept" : "Pause auto-accept")
 
             // Quick actions menu
             if promptManager.promptCount > 1 {
@@ -209,28 +222,29 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(promptManager.prompts.enumerated()), id: \.element.id) { index, prompt in
+                    ForEach(Array(filteredPrompts.enumerated()), id: \.element.id) { index, prompt in
                         PromptCardView(
                             prompt: prompt,
                             sessionColor: promptManager.colorForSession(prompt.sessionId),
                             isActive: index == selectedIndex,
-                            autoAcceptSeconds: prompt.autoAcceptIn,
-                            timerPaused: pausedPromptIds.contains(prompt.id),
+                            windowFocused: controlActiveState == .key,
+                            enableAnimations: settingsManager.settings.native.enableAnimations,
                             onAccept: {
                                 promptManager.resolvePrompt(prompt, decision: .allow)
                             },
                             onDeny: {
                                 promptManager.resolvePrompt(prompt, decision: .deny)
                             },
-                            onOther: {
-                                selectedPromptForOther = prompt
-                                showingOtherDialog = true
+                            onAcceptWithReason: { reason in
+                                promptManager.resolvePrompt(prompt, decision: .allow, reason: reason)
+                            },
+                            onDenyWithReason: { reason in
+                                promptManager.resolvePrompt(prompt, decision: .deny, reason: reason)
                             }
                         )
                         .id(prompt.id)
                         .onTapGesture {
                             selectedIndex = index
-                            pausedPromptIds.insert(prompt.id)
                         }
                     }
                 }
@@ -238,9 +252,9 @@ struct ContentView: View {
             }
             .background(Color(nsColor: .controlBackgroundColor))
             .onChange(of: selectedIndex) { newIndex in
-                if newIndex < promptManager.prompts.count {
+                if newIndex < filteredPrompts.count {
                     withAnimation {
-                        proxy.scrollTo(promptManager.prompts[newIndex].id, anchor: .center)
+                        proxy.scrollTo(filteredPrompts[newIndex].id, anchor: .center)
                     }
                 }
             }
