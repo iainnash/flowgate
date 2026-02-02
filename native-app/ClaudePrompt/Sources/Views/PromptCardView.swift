@@ -18,6 +18,9 @@ struct PromptCardView: View {
     // Animation state for entrance
     @State private var appeared: Bool = false
 
+    // Animation state for exit (auto-dismiss)
+    @State private var shouldDismiss: Bool = false
+
     // Computed properties for prompt type (based on server-provided acceptType)
     private var isImmediateAutoAccept: Bool { prompt.acceptType == .autoAccept }
     private var isAcceptAfter: Bool { prompt.acceptType == .acceptAfter }
@@ -101,9 +104,9 @@ struct PromptCardView: View {
         )
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         // Entrance animation
-        .opacity(enableAnimations ? (appeared ? 1 : 0) : 1)
-        .offset(y: enableAnimations ? (appeared ? 0 : -20) : 0)
-        .scaleEffect(enableAnimations ? (appeared ? 1 : 0.95) : 1)
+        .opacity(enableAnimations ? (appeared && !shouldDismiss ? 1 : 0) : (shouldDismiss ? 0 : 1))
+        .offset(y: enableAnimations ? (appeared && !shouldDismiss ? 0 : -20) : (shouldDismiss ? -20 : 0))
+        .scaleEffect(enableAnimations ? (appeared && !shouldDismiss ? 1 : 0.95) : (shouldDismiss ? 0.95 : 1))
         .onAppear {
             if enableAnimations {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0)) {
@@ -111,6 +114,19 @@ struct PromptCardView: View {
                 }
             } else {
                 appeared = true
+            }
+
+            // Auto-dismiss after 3 seconds for immediate auto-accept prompts
+            if isImmediateAutoAccept {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    if enableAnimations {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            shouldDismiss = true
+                        }
+                    } else {
+                        shouldDismiss = true
+                    }
+                }
             }
         }
     }
@@ -206,14 +222,14 @@ struct PromptCardView: View {
                         if isActive {
                             Text("⌘⇧Y")
                                 .font(.system(size: 9))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, isActive ? 6 : 8)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(windowFocused ? .green : .green.opacity(0.7))
+                .tint(.green)
             }
 
             // Deny button
@@ -226,14 +242,14 @@ struct PromptCardView: View {
                     if isActive {
                         Text("⌘⇧N")
                             .font(.system(size: 9))
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, isActive ? 6 : 8)
             }
             .buttonStyle(.borderedProminent)
-            .tint(windowFocused ? .red : .red.opacity(0.7))
+            .tint(.red)
 
             // Other button - toggles inline text field
             Button {

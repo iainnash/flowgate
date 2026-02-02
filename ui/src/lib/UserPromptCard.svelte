@@ -38,7 +38,7 @@
   let otherInputs: Record<number, string> = {};
   let showOther: Record<number, boolean> = {};
 
-  async function handleSubmit() {
+  function handleSubmit() {
     // Build the answers object for the response
     const responseAnswers: Record<string, string> = {};
 
@@ -54,15 +54,15 @@
     });
 
     // For user prompts, we allow with the answers as updatedInput
-    await resolvePrompt(prompt.id, {
+    resolvePrompt(prompt.id, {
       decision: 'allow',
       updatedInput: { answers: responseAnswers },
     });
     dispatch('resolved');
   }
 
-  async function handleSkip() {
-    await resolvePrompt(prompt.id, {
+  function handleSkip() {
+    resolvePrompt(prompt.id, {
       decision: 'ask',
       reason: 'User skipped to terminal',
     });

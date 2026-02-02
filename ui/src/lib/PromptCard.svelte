@@ -73,26 +73,26 @@
     if (intervalId) clearInterval(intervalId);
   });
 
-  async function handleYes() {
-    await resolvePrompt(prompt.id, { decision: 'allow' });
+  function handleYes() {
+    resolvePrompt(prompt.id, { decision: 'allow' });
   }
 
-  async function handleNo() {
-    await resolvePrompt(prompt.id, { decision: 'deny', reason: 'Denied by user' });
+  function handleNo() {
+    resolvePrompt(prompt.id, { decision: 'deny', reason: 'Denied by user' });
   }
 
   function handleOther() {
     showModal = true;
   }
 
-  async function handleDeny(e: CustomEvent<{ reason: string }>) {
+  function handleDeny(e: CustomEvent<{ reason: string }>) {
     showModal = false;
-    await resolvePrompt(prompt.id, { decision: 'deny', reason: e.detail.reason });
+    resolvePrompt(prompt.id, { decision: 'deny', reason: e.detail.reason });
   }
 
-  async function handleModify(e: CustomEvent<{ updatedInput: Record<string, unknown> }>) {
+  function handleModify(e: CustomEvent<{ updatedInput: Record<string, unknown> }>) {
     showModal = false;
-    await resolvePrompt(prompt.id, { decision: 'allow', updatedInput: e.detail.updatedInput });
+    resolvePrompt(prompt.id, { decision: 'allow', updatedInput: e.detail.updatedInput });
   }
 </script>
 

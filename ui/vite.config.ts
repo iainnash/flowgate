@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../server/public',
+    outDir: '../go-server/public',
     emptyOutDir: true,
   },
 });

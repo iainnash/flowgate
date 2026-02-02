@@ -23,9 +23,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var popover: NSPopover!
     var floatingWindow: NSWindow?
 
-    let promptManager = PromptManager()
-    let settingsManager = SettingsManager()
+    let promptManager: PromptManager
+    let settingsManager: SettingsManager
     let hotkeyManager = HotkeyManager()
+
+    override init() {
+        // Create shared WebSocket client
+        let webSocketClient = WebSocketClient()
+
+        // Initialize managers with shared client
+        self.promptManager = PromptManager(webSocket: webSocketClient)
+        self.settingsManager = SettingsManager(webSocket: webSocketClient)
+
+        super.init()
+
+        // Link managers so PromptManager can forward settings updates
+        promptManager.settingsManager = settingsManager
+    }
 
     nonisolated func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
@@ -55,11 +69,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Request notification permission
         promptManager.requestNotificationPermission()
 
-        // Connect to server
+        // Connect to server (will receive settings via WebSocket)
         promptManager.connect()
-
-        // Sync settings
-        await settingsManager.syncWithServer()
     }
 
     private func setupMenuBar() {
@@ -167,7 +178,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleNewPrompts(_ newPrompts: [Prompt]) {
-        let focusMode = settingsManager.settings.native.focusStealMode
+        let focusMode = settingsManager.settings.nativeOnly.focusStealMode
 
         switch focusMode {
         case .never:
@@ -235,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        hotkeyManager.setup(config: settingsManager.settings.native.globalHotkeys)
+        hotkeyManager.setup(config: settingsManager.settings.nativeOnly.globalHotkeys)
     }
 
     @objc private func togglePopover() {
@@ -251,7 +262,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showFloatingWindow() {
         guard let window = floatingWindow else { return }
 
-        let animationsEnabled = settingsManager.settings.native.enableAnimations
+        let animationsEnabled = settingsManager.settings.server.native.enableAnimations
 
         if animationsEnabled {
             // Start transparent
@@ -276,7 +287,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func hideFloatingWindow() {
         guard let window = floatingWindow else { return }
 
-        let animationsEnabled = settingsManager.settings.native.enableAnimations
+        let animationsEnabled = settingsManager.settings.server.native.enableAnimations
 
         if animationsEnabled {
             // Fade out

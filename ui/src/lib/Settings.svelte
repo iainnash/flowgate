@@ -1,44 +1,33 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
-  import { settings, saveSettings, TOOL_CATEGORIES, getToolCategory } from './stores';
-  import type { Settings, PermissionRule, RuleMatchType, RuleAction, ToolCategory, ProjectConfig } from './types';
+  import { settings, updateSettings, TOOL_CATEGORIES } from './stores';
+  import type { Settings, Rule, RuleAction, ToolCategory } from './types';
 
   export let open: boolean = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  // Local state
-  let localRules: PermissionRule[] = [];
-  let localProjects: ProjectConfig[] = [];
-  let activeTab: 'global' | string = 'global';
-  let editingRule: PermissionRule | null = null;
-  let editingProjectPath: string = '';
-  let showNewProjectDialog = false;
-  let newProjectPath = '';
+  // Local state for editing
+  let localRules: Rule[] = [];
+  let editingRule: Rule | null = null;
+  let showRuleEditor = false;
 
   // Rule editor state
   let editName = '';
-  let editMatchType: RuleMatchType = 'category';
-  let editMatchValue = '';
-  let editActionType: 'auto-accept' | 'accept-after' | 'require-verify' = 'require-verify';
-  let editActionSeconds = 10;
+  let editToolName = '';
+  let editCategory: ToolCategory | '' = '';
+  let editPattern = '';
+  let editActionType: 'manual' | 'auto-accept' | 'accept-after' = 'manual';
+  let editActionSeconds = 5;
   let editEnabled = true;
 
   // Categories for dropdown
-  const categories: ToolCategory[] = ['read', 'write', 'execute', 'web', 'mcp', 'interactive', 'other'];
-  const categoryColors: Record<ToolCategory, string> = {
-    read: '#22c55e',
-    write: '#ef4444',
-    execute: '#f59e0b',
-    web: '#3b82f6',
-    interactive: '#8b5cf6',
-    mcp: '#06b6d4',
-    other: '#6b7280',
-  };
+  const categories: (ToolCategory | '')[] = ['', 'read', 'write', 'execute', 'web', 'interactive', 'mcp', 'other'];
 
-  // Known tools for dropdown
+  // Known tools from TOOL_CATEGORIES
   const knownTools = [
+    '',
     ...Array.from(TOOL_CATEGORIES.read),
     ...Array.from(TOOL_CATEGORIES.write),
     ...Array.from(TOOL_CATEGORIES.execute),
@@ -46,77 +35,57 @@
     ...Array.from(TOOL_CATEGORIES.interactive),
   ].sort();
 
-  // Reset when dialog opens
+  // Load current settings when dialog opens
   let wasOpen = false;
   $: {
     if (open && !wasOpen) {
       const current = get(settings);
       localRules = current.rules.map(r => ({ ...r }));
-      localProjects = current.projects.map(p => ({
-        ...p,
-        rules: p.rules.map(r => ({ ...r })),
-      }));
-      activeTab = 'global';
       editingRule = null;
-      showNewProjectDialog = false;
+      showRuleEditor = false;
     }
     wasOpen = open;
   }
 
-  function getCurrentRules(): PermissionRule[] {
-    if (activeTab === 'global') {
-      return localRules;
-    }
-    const project = localProjects.find(p => p.projectPath === activeTab);
-    return project?.rules ?? [];
+  function close() {
+    open = false;
+    dispatch('close');
   }
 
-  function setCurrentRules(rules: PermissionRule[]): void {
-    if (activeTab === 'global') {
-      localRules = rules;
-    } else {
-      localProjects = localProjects.map(p =>
-        p.projectPath === activeTab ? { ...p, rules } : p
-      );
-    }
+  function addNewRule(): void {
+    const newRule: Rule = {
+      name: 'New Rule',
+      toolName: '',
+      category: undefined,
+      pattern: undefined,
+      action: { type: 'manual' },
+      enabled: true,
+      matchCount: 0,
+    };
+    localRules = [...localRules, newRule];
+    startEditRule(newRule);
   }
 
-  function startEditRule(rule: PermissionRule): void {
+  function startEditRule(rule: Rule): void {
     editingRule = rule;
     editName = rule.name;
-    editMatchType = rule.matchType;
-    editMatchValue = rule.matchValue;
+    editToolName = rule.toolName || '';
+    editCategory = (rule.category as ToolCategory) || '';
+    editPattern = rule.pattern || '';
     editEnabled = rule.enabled;
+
     if (rule.action.type === 'auto-accept') {
       editActionType = 'auto-accept';
       editActionSeconds = 0;
     } else if (rule.action.type === 'accept-after') {
       editActionType = 'accept-after';
-      editActionSeconds = rule.action.seconds;
+      editActionSeconds = rule.action.seconds || 5;
     } else {
-      editActionType = 'require-verify';
-      editActionSeconds = 10;
+      editActionType = 'manual';
+      editActionSeconds = 5;
     }
-  }
 
-  function addNewRule(): void {
-    const newRule: PermissionRule = {
-      id: crypto.randomUUID(),
-      name: 'New Rule',
-      matchType: 'category',
-      matchValue: 'read',
-      action: { type: 'require-verify' },
-      enabled: true,
-    };
-    const rules = getCurrentRules();
-    // Insert before the last catch-all rule if there is one
-    const lastRule = rules[rules.length - 1];
-    if (lastRule?.matchType === 'all') {
-      setCurrentRules([...rules.slice(0, -1), newRule, lastRule]);
-    } else {
-      setCurrentRules([...rules, newRule]);
-    }
-    startEditRule(newRule);
+    showRuleEditor = true;
   }
 
   function saveRule(): void {
@@ -128,689 +97,821 @@
     } else if (editActionType === 'accept-after') {
       action = { type: 'accept-after', seconds: editActionSeconds };
     } else {
-      action = { type: 'require-verify' };
+      action = { type: 'manual' };
     }
 
-    // Set matchValue to '*' for 'all' match type
-    const matchValue = editMatchType === 'all' ? '*' : editMatchValue;
-
-    const updatedRule: PermissionRule = {
+    const updatedRule: Rule = {
       ...editingRule,
       name: editName,
-      matchType: editMatchType,
-      matchValue,
+      toolName: editToolName || '',
+      category: editCategory || undefined,
+      pattern: editPattern || undefined,
       action,
       enabled: editEnabled,
     };
 
-    const rules = getCurrentRules();
-    setCurrentRules(rules.map(r => r.id === editingRule!.id ? updatedRule : r));
-    editingRule = null;
+    const index = localRules.findIndex(r => r.name === editingRule.name);
+    if (index !== -1) {
+      localRules = [...localRules.slice(0, index), updatedRule, ...localRules.slice(index + 1)];
+    }
+
+    cancelEdit();
   }
 
-  function deleteRule(id: string): void {
-    const rules = getCurrentRules();
-    setCurrentRules(rules.filter(r => r.id !== id));
-    if (editingRule?.id === id) {
-      editingRule = null;
+  function cancelEdit(): void {
+    editingRule = null;
+    showRuleEditor = false;
+  }
+
+  function deleteRule(name: string): void {
+    localRules = localRules.filter(r => r.name !== name);
+    if (editingRule?.name === name) {
+      cancelEdit();
     }
   }
 
-  function moveRule(id: string, direction: 'up' | 'down'): void {
-    const rules = getCurrentRules();
-    const idx = rules.findIndex(r => r.id === id);
+  function moveRule(name: string, direction: 'up' | 'down'): void {
+    const idx = localRules.findIndex(r => r.name === name);
     if (idx === -1) return;
+
     if (direction === 'up' && idx > 0) {
-      const newRules = [...rules];
+      const newRules = [...localRules];
       const temp = newRules[idx - 1];
       newRules[idx - 1] = newRules[idx];
       newRules[idx] = temp;
-      setCurrentRules(newRules);
-    } else if (direction === 'down' && idx < rules.length - 1) {
-      const newRules = [...rules];
+      localRules = newRules;
+    } else if (direction === 'down' && idx < localRules.length - 1) {
+      const newRules = [...localRules];
       const temp = newRules[idx];
       newRules[idx] = newRules[idx + 1];
       newRules[idx + 1] = temp;
-      setCurrentRules(newRules);
+      localRules = newRules;
     }
   }
 
-  function toggleRule(id: string): void {
-    const rules = getCurrentRules();
-    setCurrentRules(rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  function toggleRule(name: string): void {
+    localRules = localRules.map(r =>
+      r.name === name ? { ...r, enabled: !r.enabled } : r
+    );
   }
 
-  function addProject(): void {
-    if (!newProjectPath.trim()) return;
-    const path = newProjectPath.trim();
-    if (localProjects.some(p => p.projectPath === path)) return;
-
-    localProjects = [...localProjects, { projectPath: path, rules: [] }];
-    activeTab = path;
-    showNewProjectDialog = false;
-    newProjectPath = '';
-  }
-
-  function removeProject(path: string): void {
-    localProjects = localProjects.filter(p => p.projectPath !== path);
-    if (activeTab === path) {
-      activeTab = 'global';
-    }
-  }
-
-  async function handleSave() {
+  function saveSettings(): void {
     const newSettings: Settings = {
+      ...$settings,
       rules: localRules,
-      projects: localProjects,
     };
+    updateSettings(newSettings);
     settings.set(newSettings);
-    try {
-      await saveSettings(newSettings);
-    } catch (e) {
-      console.error('Failed to save settings:', e);
-    }
-    dispatch('close');
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (editingRule) {
-        editingRule = null;
-      } else if (showNewProjectDialog) {
-        showNewProjectDialog = false;
-      } else {
-        dispatch('close');
-      }
+  function getCategoryColor(category?: string): string {
+    switch (category) {
+      case 'read': return '#22c55e';
+      case 'write': return '#ef4444';
+      case 'execute': return '#f59e0b';
+      case 'web': return '#3b82f6';
+      case 'interactive': return '#8b5cf6';
+      case 'mcp': return '#06b6d4';
+      case 'other': return '#6b7280';
+      default: return '#888';
     }
   }
 
   function getActionLabel(action: RuleAction): string {
     if (action.type === 'auto-accept') return 'Auto-accept';
     if (action.type === 'accept-after') return `Accept after ${action.seconds}s`;
-    return 'Require verify';
-  }
-
-  function getMatchLabel(rule: PermissionRule): string {
-    switch (rule.matchType) {
-      case 'all': return 'All tools';
-      case 'category': return `Category: ${rule.matchValue}`;
-      case 'tool': return `Tool: ${rule.matchValue}`;
-      case 'pattern': return `Pattern: ${rule.matchValue}`;
-      default: return rule.matchValue;
-    }
+    return 'Manual';
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
-
 {#if open}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-  <div class="overlay" on:click={() => dispatch('close')} role="presentation">
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-    <div class="modal" on:click|stopPropagation role="dialog" aria-modal="true">
-      <h3>Permission Rules</h3>
-      <p class="description">Rules are evaluated top-to-bottom. First matching rule wins.</p>
-
-      <!-- Tabs -->
-      <div class="tabs">
-        <button
-          class="tab"
-          class:active={activeTab === 'global'}
-          on:click={() => { activeTab = 'global'; editingRule = null; }}
-        >
-          Global
-        </button>
-        {#each localProjects as project}
-          <button
-            class="tab project-tab"
-            class:active={activeTab === project.projectPath}
-            on:click={() => { activeTab = project.projectPath; editingRule = null; }}
-          >
-            <span class="project-name">{project.projectPath.split('/').pop()}</span>
-            <button
-              class="remove-project"
-              on:click|stopPropagation={() => removeProject(project.projectPath)}
-              title="Remove project"
-            >×</button>
-          </button>
-        {/each}
-        <button class="tab add-tab" on:click={() => { showNewProjectDialog = true; }}>
-          + Project
-        </button>
+  <div class="settings-overlay" on:click={close} role="presentation">
+    <div class="settings-dialog" on:click|stopPropagation role="dialog" aria-label="Settings">
+      <div class="settings-header">
+        <h2>Rules Configuration</h2>
+        <button class="close-btn" on:click={close} aria-label="Close">×</button>
       </div>
 
-      {#if showNewProjectDialog}
-        <div class="new-project-dialog">
-          <input
-            type="text"
-            placeholder="/path/to/project"
-            bind:value={newProjectPath}
-            on:keydown={(e) => e.key === 'Enter' && addProject()}
-          />
-          <button class="btn small" on:click={addProject}>Add</button>
-          <button class="btn small cancel" on:click={() => { showNewProjectDialog = false; newProjectPath = ''; }}>Cancel</button>
-        </div>
-      {/if}
+      <div class="settings-content">
+        <!-- Rule editor panel -->
+        {#if showRuleEditor && editingRule}
+          <div class="rule-editor">
+            <h3>Edit Rule</h3>
 
-      <!-- Rules List -->
-      <div class="rules-list">
-        {#each getCurrentRules() as rule, idx (rule.id)}
-          <div class="rule-item" class:disabled={!rule.enabled} class:editing={editingRule?.id === rule.id}>
-            <div class="rule-controls">
-              <button
-                class="move-btn"
-                disabled={idx === 0}
-                on:click={() => moveRule(rule.id, 'up')}
-                title="Move up"
-              >↑</button>
-              <button
-                class="move-btn"
-                disabled={idx === getCurrentRules().length - 1}
-                on:click={() => moveRule(rule.id, 'down')}
-                title="Move down"
-              >↓</button>
-            </div>
-            <div class="rule-content" on:click={() => startEditRule(rule)} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && startEditRule(rule)}>
-              <div class="rule-header">
-                <span class="rule-name">{rule.name}</span>
-                <span class="rule-action" class:auto={rule.action.type !== 'require-verify'}>
-                  {getActionLabel(rule.action)}
-                </span>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="rule-name">Rule Name</label>
+                <input
+                  id="rule-name"
+                  type="text"
+                  bind:value={editName}
+                  placeholder="e.g., Auto-accept Read operations"
+                />
               </div>
-              <div class="rule-match">{getMatchLabel(rule)}</div>
+
+              <div class="form-group">
+                <label for="rule-enabled">
+                  <input id="rule-enabled" type="checkbox" bind:checked={editEnabled} />
+                  Enabled
+                </label>
+              </div>
             </div>
-            <div class="rule-actions">
-              <label class="toggle">
-                <input type="checkbox" checked={rule.enabled} on:change={() => toggleRule(rule.id)} />
-                <span class="toggle-slider"></span>
+
+            <div class="form-section">
+              <h4>Match Conditions</h4>
+              <p class="hint">Rules match if ANY condition is met (toolName OR category OR pattern)</p>
+
+              <div class="form-group">
+                <label for="rule-tool">Specific Tool</label>
+                <select id="rule-tool" bind:value={editToolName}>
+                  {#each knownTools as tool}
+                    <option value={tool}>{tool || '(any tool)'}</option>
+                  {/each}
+                </select>
+                <span class="field-hint">Match a specific tool like "Bash" or "Edit"</span>
+              </div>
+
+              <div class="form-group">
+                <label for="rule-category">Tool Category</label>
+                <select id="rule-category" bind:value={editCategory}>
+                  {#each categories as cat}
+                    <option value={cat}>{cat || '(any category)'}</option>
+                  {/each}
+                </select>
+                <span class="field-hint">Match all tools in a category like "read" or "write"</span>
+              </div>
+
+              <div class="form-group">
+                <label for="rule-pattern">Pattern (advanced)</label>
+                <input
+                  id="rule-pattern"
+                  type="text"
+                  bind:value={editPattern}
+                  placeholder="e.g., cwd.startsWith('/home/project')"
+                />
+                <span class="field-hint">JavaScript expression evaluated against prompt</span>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h4>Action</h4>
+
+              <div class="form-group">
+                <label>
+                  <input type="radio" bind:group={editActionType} value="manual" />
+                  Manual - Always require user approval
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <input type="radio" bind:group={editActionType} value="auto-accept" />
+                  Auto-accept - Accept immediately without delay
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label>
+                  <input type="radio" bind:group={editActionType} value="accept-after" />
+                  Accept after delay
+                </label>
+                {#if editActionType === 'accept-after'}
+                  <div class="inline-input">
+                    <input
+                      type="number"
+                      bind:value={editActionSeconds}
+                      min="1"
+                      max="60"
+                      style="width: 80px;"
+                    />
+                    <span>seconds</span>
+                  </div>
+                {/if}
+              </div>
+            </div>
+
+            <div class="editor-actions">
+              <button class="btn-secondary" on:click={cancelEdit}>Cancel</button>
+              <button class="btn-primary" on:click={saveRule}>Save Rule</button>
+            </div>
+          </div>
+        {:else}
+          <!-- Rules list -->
+          <div class="rules-section">
+            <div class="section-header">
+              <h3>Rules ({localRules.length})</h3>
+              <button class="btn-add" on:click={addNewRule}>
+                <span>+</span> Add Rule
+              </button>
+            </div>
+
+            <p class="info-box">
+              Rules are evaluated in order. The first matching rule determines how a prompt is handled.
+              You can drag rules to reorder them.
+            </p>
+
+            {#if localRules.length === 0}
+              <div class="empty-state">
+                <p>No rules configured</p>
+                <p class="hint">Add a rule to auto-accept or customize prompt handling</p>
+              </div>
+            {:else}
+              <div class="rules-list">
+                {#each localRules as rule, idx (rule.name)}
+                  <div class="rule-card" class:disabled={!rule.enabled}>
+                    <div class="rule-main">
+                      <div class="rule-info">
+                        <div class="rule-header-line">
+                          <span class="rule-name">{rule.name}</span>
+                          {#if !rule.enabled}
+                            <span class="rule-badge disabled">Disabled</span>
+                          {/if}
+                          <span class="rule-badge" style="background: {getCategoryColor(rule.category)}">
+                            {getActionLabel(rule.action)}
+                          </span>
+                        </div>
+
+                        <div class="rule-details">
+                          {#if rule.toolName}
+                            <div class="rule-detail">
+                              <span class="label">Tool:</span>
+                              <code>{rule.toolName}</code>
+                            </div>
+                          {/if}
+                          {#if rule.category}
+                            <div class="rule-detail">
+                              <span class="label">Category:</span>
+                              <span class="category-badge" style="background: {getCategoryColor(rule.category)}">
+                                {rule.category}
+                              </span>
+                            </div>
+                          {/if}
+                          {#if rule.pattern}
+                            <div class="rule-detail">
+                              <span class="label">Pattern:</span>
+                              <code class="pattern">{rule.pattern}</code>
+                            </div>
+                          {/if}
+                          <div class="rule-detail">
+                            <span class="label">Matched:</span>
+                            <span>{rule.matchCount} times</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="rule-actions">
+                        <button
+                          class="icon-btn"
+                          on:click={() => toggleRule(rule.name)}
+                          title={rule.enabled ? 'Disable' : 'Enable'}
+                        >
+                          {rule.enabled ? '◉' : '○'}
+                        </button>
+                        <button
+                          class="icon-btn"
+                          on:click={() => moveRule(rule.name, 'up')}
+                          disabled={idx === 0}
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          class="icon-btn"
+                          on:click={() => moveRule(rule.name, 'down')}
+                          disabled={idx === localRules.length - 1}
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          class="icon-btn"
+                          on:click={() => startEditRule(rule)}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          class="icon-btn danger"
+                          on:click={() => deleteRule(rule.name)}
+                          title="Delete"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Native settings -->
+          <div class="native-section">
+            <h3>Native App Settings</h3>
+            <div class="native-settings">
+              <label>
+                <input type="checkbox" checked={$settings.native.showAutoAccept} disabled />
+                Show auto-accept prompts
               </label>
-              <button class="delete-btn" on:click={() => deleteRule(rule.id)} title="Delete rule">×</button>
+              <label>
+                <input type="checkbox" checked={$settings.native.enableAnimations} disabled />
+                Enable animations
+              </label>
             </div>
+            <p class="hint">Native settings can only be changed from the native app</p>
           </div>
-        {/each}
 
-        {#if getCurrentRules().length === 0}
-          <div class="empty-rules">No rules configured. Add a rule to get started.</div>
+          <!-- Save button -->
+          <div class="save-section">
+            <button class="btn-save" on:click={saveSettings}>
+              Save Changes
+            </button>
+            <p class="hint">Changes are saved to the server and applied immediately</p>
+          </div>
         {/if}
-      </div>
-
-      <button class="add-rule-btn" on:click={addNewRule}>+ Add Rule</button>
-
-      <!-- Rule Editor -->
-      {#if editingRule}
-        <div class="rule-editor">
-          <h4>Edit Rule</h4>
-
-          <div class="form-row">
-            <label>Name</label>
-            <input type="text" bind:value={editName} placeholder="Rule name" />
-          </div>
-
-          <div class="form-row">
-            <label>Match Type</label>
-            <select bind:value={editMatchType}>
-              <option value="category">Category</option>
-              <option value="tool">Specific Tool</option>
-              <option value="pattern">Pattern (regex)</option>
-              <option value="all">All Tools</option>
-            </select>
-          </div>
-
-          {#if editMatchType === 'category'}
-            <div class="form-row">
-              <label>Category</label>
-              <select bind:value={editMatchValue}>
-                {#each categories as cat}
-                  <option value={cat}>{cat}</option>
-                {/each}
-              </select>
-            </div>
-          {:else if editMatchType === 'tool'}
-            <div class="form-row">
-              <label>Tool</label>
-              <select bind:value={editMatchValue}>
-                {#each knownTools as tool}
-                  <option value={tool}>{tool}</option>
-                {/each}
-              </select>
-            </div>
-          {:else if editMatchType === 'pattern'}
-            <div class="form-row">
-              <label>Pattern</label>
-              <input type="text" bind:value={editMatchValue} placeholder="e.g., mcp__slack.*" />
-            </div>
-          {:else if editMatchType === 'all'}
-            <div class="form-row">
-              <label>Match Value</label>
-              <input type="text" value="*" disabled />
-            </div>
-          {/if}
-
-          <div class="form-row">
-            <label>Action</label>
-            <select bind:value={editActionType}>
-              <option value="auto-accept">Auto-accept (immediately)</option>
-              <option value="accept-after">Accept after delay</option>
-              <option value="require-verify">Always require verification</option>
-            </select>
-          </div>
-
-          {#if editActionType === 'accept-after'}
-            <div class="form-row">
-              <label>Delay (seconds)</label>
-              <input type="number" bind:value={editActionSeconds} min="1" max="120" />
-            </div>
-          {/if}
-
-          <div class="editor-actions">
-            <button class="btn cancel" on:click={() => { editingRule = null; }}>Cancel</button>
-            <button class="btn save" on:click={saveRule}>Apply</button>
-          </div>
-        </div>
-      {/if}
-
-      <div class="actions">
-        <button class="btn cancel" on:click={() => dispatch('close')}>
-          Cancel
-        </button>
-        <button class="btn save" on:click={handleSave}>
-          Save All
-        </button>
       </div>
     </div>
   </div>
 {/if}
 
 <style>
-  .overlay {
+  .settings-overlay {
     position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
   }
 
-  .modal {
-    background: var(--card-bg, #2a2a3e);
-    border-radius: 12px;
-    padding: 20px;
-    width: 90%;
-    max-width: 600px;
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .settings-dialog {
+    background: var(--bg-secondary, #2a2a3e);
+    border-radius: 16px;
+    max-width: 900px;
     max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  }
-
-  h3 {
-    margin: 0 0 4px;
-    font-size: 18px;
-    color: var(--text-primary, #eee);
-  }
-
-  h4 {
-    margin: 0 0 12px;
-    font-size: 14px;
-    color: var(--text-secondary, #ccc);
-  }
-
-  .description {
-    margin: 0 0 16px;
-    font-size: 12px;
-    color: var(--text-muted, #888);
-  }
-
-  /* Tabs */
-  .tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-
-  .tab {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 6px;
-    background: var(--input-bg, #1a1a2e);
-    color: var(--text-muted, #888);
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .tab:hover {
-    background: var(--hover-bg, #333);
-    color: var(--text-secondary, #ccc);
-  }
-
-  .tab.active {
-    background: var(--accent-color, #3b82f6);
-    color: white;
-  }
-
-  .tab.add-tab {
-    background: transparent;
-    border: 1px dashed var(--input-border, #444);
-    color: var(--text-muted, #666);
-  }
-
-  .tab.add-tab:hover {
-    border-color: var(--accent-color, #3b82f6);
-    color: var(--accent-color, #3b82f6);
-  }
-
-  .project-tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .project-name {
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .remove-project {
-    background: none;
-    border: none;
-    color: var(--text-muted, #666);
-    cursor: pointer;
-    padding: 0;
-    font-size: 14px;
-    line-height: 1;
-  }
-
-  .remove-project:hover {
-    color: #ef4444;
-  }
-
-  .new-project-dialog {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    padding: 12px;
-    background: var(--input-bg, #1a1a2e);
-    border-radius: 8px;
-  }
-
-  .new-project-dialog input {
-    flex: 1;
-    padding: 8px;
-    border: 1px solid var(--input-border, #444);
-    border-radius: 4px;
-    background: var(--card-bg, #2a2a3e);
-    color: var(--text-primary, #eee);
-    font-size: 13px;
-  }
-
-  /* Rules List */
-  .rules-list {
+    width: 90%;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 12px;
-    max-height: 300px;
-    overflow-y: auto;
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.4);
+    animation: slideUp 0.3s ease-out;
   }
 
-  .rule-item {
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .settings-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    background: var(--input-bg, #1a1a2e);
-    border-radius: 8px;
-    border: 1px solid transparent;
-    transition: all 0.15s;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border-color, #333);
   }
 
-  .rule-item:hover {
-    background: var(--hover-bg, #222238);
+  .settings-header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
   }
 
-  .rule-item.editing {
-    border-color: var(--accent-color, #3b82f6);
-  }
-
-  .rule-item.disabled {
-    opacity: 0.5;
-  }
-
-  .rule-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .move-btn {
+  .close-btn {
     background: none;
     border: none;
-    color: var(--text-muted, #666);
+    font-size: 32px;
+    line-height: 1;
+    color: var(--text-secondary, #888);
     cursor: pointer;
     padding: 0;
-    font-size: 10px;
-    line-height: 1;
-  }
-
-  .move-btn:hover:not(:disabled) {
-    color: var(--accent-color, #3b82f6);
-  }
-
-  .move-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-
-  .rule-content {
-    flex: 1;
-    cursor: pointer;
-    min-width: 0;
-  }
-
-  .rule-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 2px;
-  }
-
-  .rule-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary, #eee);
-  }
-
-  .rule-action {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: var(--input-border, #444);
-    color: var(--text-muted, #aaa);
-  }
-
-  .rule-action.auto {
-    background: #22c55e33;
-    color: #22c55e;
-  }
-
-  .rule-match {
-    font-size: 11px;
-    color: var(--text-muted, #666);
-  }
-
-  .rule-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .toggle {
-    position: relative;
-    display: inline-block;
     width: 32px;
-    height: 18px;
-  }
-
-  .toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: var(--input-border, #444);
-    border-radius: 18px;
-    transition: 0.2s;
-  }
-
-  .toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 14px;
-    width: 14px;
-    left: 2px;
-    bottom: 2px;
-    background: white;
-    border-radius: 50%;
-    transition: 0.2s;
-  }
-
-  .toggle input:checked + .toggle-slider {
-    background: var(--accent-color, #3b82f6);
-  }
-
-  .toggle input:checked + .toggle-slider:before {
-    transform: translateX(14px);
-  }
-
-  .delete-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #666);
-    cursor: pointer;
-    padding: 4px;
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  .delete-btn:hover {
-    color: #ef4444;
-  }
-
-  .empty-rules {
-    padding: 24px;
-    text-align: center;
-    color: var(--text-muted, #666);
-    font-size: 13px;
-  }
-
-  .add-rule-btn {
-    width: 100%;
-    padding: 10px;
-    border: 1px dashed var(--input-border, #444);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-muted, #666);
-    font-size: 13px;
-    cursor: pointer;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
     transition: all 0.15s;
   }
 
-  .add-rule-btn:hover {
-    border-color: var(--accent-color, #3b82f6);
-    color: var(--accent-color, #3b82f6);
+  .close-btn:hover {
+    background: var(--hover-bg, #333);
+    color: var(--text-primary, #fff);
+  }
+
+  .settings-content {
+    padding: 24px 28px;
+    overflow-y: auto;
+  }
+
+  .info-box {
+    background: var(--bg-tertiary, #1a1a2e);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    color: var(--text-secondary, #aaa);
+    font-size: 14px;
+    border-left: 3px solid var(--accent-color, #3b82f6);
   }
 
   /* Rule Editor */
   .rule-editor {
-    margin-top: 16px;
-    padding: 16px;
-    background: var(--input-bg, #1a1a2e);
-    border-radius: 8px;
-    border: 1px solid var(--accent-color, #3b82f6);
+    background: var(--bg-tertiary, #1a1a2e);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
   }
 
-  .form-row {
-    margin-bottom: 12px;
+  .rule-editor h3 {
+    margin: 0 0 20px 0;
+    font-size: 20px;
+    color: var(--text-primary, #fff);
   }
 
-  .form-row label {
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 24px;
+  }
+
+  .form-section {
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-color, #333);
+  }
+
+  .form-section:last-of-type {
+    border-bottom: none;
+  }
+
+  .form-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+  }
+
+  .form-section .hint {
+    font-size: 13px;
+    color: var(--text-muted, #666);
+    margin-bottom: 16px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-group label {
     display: block;
-    margin-bottom: 4px;
-    font-size: 12px;
-    color: var(--text-muted, #888);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary, #ccc);
+    margin-bottom: 6px;
   }
 
-  .form-row input,
-  .form-row select {
+  .form-group input[type="checkbox"] {
+    margin-right: 8px;
+  }
+
+  .form-group input[type="text"],
+  .form-group input[type="number"],
+  .form-group select {
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 12px;
+    background: var(--input-bg, #1a1a2e);
     border: 1px solid var(--input-border, #444);
     border-radius: 6px;
-    background: var(--card-bg, #2a2a3e);
-    color: var(--text-primary, #eee);
-    font-size: 13px;
+    color: var(--text-primary, #fff);
+    font-size: 14px;
+    transition: border-color 0.15s;
   }
 
-  .form-row input:focus,
-  .form-row select:focus {
+  .form-group input[type="text"]:focus,
+  .form-group input[type="number"]:focus,
+  .form-group select:focus {
     outline: none;
     border-color: var(--accent-color, #3b82f6);
   }
 
-  .editor-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    margin-top: 16px;
+  .field-hint {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted, #666);
+    margin-top: 4px;
   }
 
-  /* Actions */
-  .actions {
+  .inline-input {
     display: flex;
+    align-items: center;
     gap: 8px;
+    margin-top: 8px;
+    margin-left: 24px;
+  }
+
+  .editor-actions {
+    display: flex;
+    gap: 12px;
     justify-content: flex-end;
-    margin-top: 20px;
-    padding-top: 16px;
+    margin-top: 24px;
+    padding-top: 24px;
     border-top: 1px solid var(--border-color, #333);
   }
 
-  .btn {
+  /* Rules List */
+  .rules-section {
+    margin-bottom: 32px;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .section-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+  }
+
+  .btn-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 8px 16px;
+    background: var(--accent-color, #3b82f6);
+    color: white;
     border: none;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .btn-add:hover {
+    opacity: 0.9;
+  }
+
+  .btn-add span {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary, #888);
+  }
+
+  .empty-state p {
+    margin: 0;
+  }
+
+  .empty-state .hint {
+    font-size: 14px;
+    margin-top: 8px;
+    color: var(--text-muted, #666);
+  }
+
+  .rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .rule-card {
+    background: var(--bg-tertiary, #1a1a2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 10px;
+    padding: 16px;
     transition: all 0.15s;
   }
 
-  .btn.small {
-    padding: 6px 12px;
+  .rule-card:hover {
+    border-color: var(--accent-color, #3b82f6);
+  }
+
+  .rule-card.disabled {
+    opacity: 0.5;
+  }
+
+  .rule-main {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .rule-info {
+    flex: 1;
+  }
+
+  .rule-header-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .rule-name {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-primary, #fff);
+  }
+
+  .rule-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: white;
+    font-weight: 600;
+  }
+
+  .rule-badge.disabled {
+    background: #6b7280;
+  }
+
+  .rule-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .rule-detail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .rule-detail .label {
+    color: var(--text-muted, #666);
+    min-width: 70px;
+  }
+
+  .rule-detail code {
+    background: var(--input-bg, #0f0f1a);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+    font-size: 13px;
+    color: var(--accent-color, #3b82f6);
+  }
+
+  .rule-detail code.pattern {
+    color: #f59e0b;
+  }
+
+  .category-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
     font-size: 12px;
+    color: white;
+    font-weight: 500;
   }
 
-  .btn.cancel {
-    background: var(--input-border, #444);
-    color: var(--text-primary, #eee);
+  .rule-actions {
+    display: flex;
+    gap: 4px;
   }
 
-  .btn.cancel:hover {
-    background: var(--hover-bg, #555);
+  .icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    border-radius: 6px;
+    color: var(--text-secondary, #888);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
   }
 
-  .btn.save {
+  .icon-btn:hover:not(:disabled) {
+    background: var(--hover-bg, #333);
+    border-color: var(--accent-color, #3b82f6);
+    color: var(--text-primary, #fff);
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .icon-btn.danger:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  /* Native settings */
+  .native-section {
+    margin-bottom: 32px;
+  }
+
+  .native-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+  }
+
+  .native-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .native-settings label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary, #ccc);
+    cursor: not-allowed;
+  }
+
+  .native-settings input[type="checkbox"] {
+    cursor: not-allowed;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--text-muted, #666);
+  }
+
+  /* Buttons */
+  .save-section {
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color, #333);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-save {
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    border: none;
+  }
+
+  .btn-primary {
     background: var(--accent-color, #3b82f6);
     color: white;
   }
 
-  .btn.save:hover {
-    background: #2563eb;
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-secondary, #ccc);
+    border: 1px solid var(--border-color, #444);
+  }
+
+  .btn-save {
+    background: #22c55e;
+    color: white;
+    font-size: 16px;
+    padding: 12px 32px;
+  }
+
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-save:hover {
+    opacity: 0.9;
   }
 </style>

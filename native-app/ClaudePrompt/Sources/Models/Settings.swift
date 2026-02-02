@@ -1,15 +1,8 @@
 import Foundation
 
-enum RuleMatchType: String, Codable {
-    case category
-    case tool
-    case pattern
-    case all
-}
-
-// Server uses action as object: { type: 'auto-accept' } or { type: 'accept-after', seconds: 5 }
+// Go server rule action
 struct RuleAction: Codable {
-    let type: String  // "auto-accept", "accept-after", "require-verify"
+    let type: String  // "manual", "auto-accept", "accept-after"
     let seconds: Int?
 
     init(type: String, seconds: Int? = nil) {
@@ -17,57 +10,69 @@ struct RuleAction: Codable {
         self.seconds = seconds
     }
 
+    static let manual = RuleAction(type: "manual")
     static let autoAccept = RuleAction(type: "auto-accept")
-    static let requireVerify = RuleAction(type: "require-verify")
     static func acceptAfter(_ seconds: Int) -> RuleAction {
         return RuleAction(type: "accept-after", seconds: seconds)
     }
 }
 
-struct PermissionRule: Identifiable, Codable {
-    let id: String
+// Go server rule structure
+struct Rule: Identifiable, Codable {
+    var id: String { name } // Use name as identifier
     let name: String
-    let matchType: RuleMatchType
-    let matchValue: String
+    let toolName: String
+    let category: String?
+    let pattern: String?
     let action: RuleAction
     let enabled: Bool
+    let matchCount: Int
 
     init(
-        id: String = UUID().uuidString,
         name: String,
-        matchType: RuleMatchType,
-        matchValue: String,
+        toolName: String,
+        category: String? = nil,
+        pattern: String? = nil,
         action: RuleAction,
-        enabled: Bool = true
+        enabled: Bool = true,
+        matchCount: Int = 0
     ) {
-        self.id = id
         self.name = name
-        self.matchType = matchType
-        self.matchValue = matchValue
+        self.toolName = toolName
+        self.category = category
+        self.pattern = pattern
         self.action = action
         self.enabled = enabled
+        self.matchCount = matchCount
     }
 }
 
-struct ProjectConfig: Codable {
-    let projectPath: String
-    var rules: [PermissionRule]
+// Go server native settings (minimal - only these two fields synced with server)
+struct NativeSettings: Codable {
+    var showAutoAccept: Bool
+    var enableAnimations: Bool
 
-    init(projectPath: String, rules: [PermissionRule] = []) {
-        self.projectPath = projectPath
+    init(
+        showAutoAccept: Bool = true,
+        enableAnimations: Bool = true
+    ) {
+        self.showAutoAccept = showAutoAccept
+        self.enableAnimations = enableAnimations
+    }
+}
+
+// Go server settings format (matches server exactly)
+struct ServerSettings: Codable {
+    var rules: [Rule]
+    var native: NativeSettings
+
+    init(rules: [Rule] = [], native: NativeSettings = NativeSettings()) {
         self.rules = rules
+        self.native = native
     }
 }
 
-struct UISettings: Codable {
-    var theme: String
-    var volume: Int
-
-    init(theme: String = "system", volume: Int = 80) {
-        self.theme = theme
-        self.volume = volume
-    }
-}
+// MARK: - Native-only settings (not synced with server)
 
 struct HotkeyConfig: Codable {
     var accept: String
@@ -105,14 +110,14 @@ enum FocusStealMode: String, Codable, CaseIterable {
     }
 }
 
-struct NativeSettings: Codable {
+// Native-only settings stored locally
+struct NativeOnlySettings: Codable {
     var floatingWindow: Bool
     var showInMenuBar: Bool
     var launchAtLogin: Bool
     var globalHotkeys: HotkeyConfig
     var focusStealMode: FocusStealMode
-    var showAutoAccept: Bool
-    var enableAnimations: Bool
+    var returnFocusWhenEmpty: Bool
 
     init(
         floatingWindow: Bool = true,
@@ -120,47 +125,28 @@ struct NativeSettings: Codable {
         launchAtLogin: Bool = false,
         globalHotkeys: HotkeyConfig = HotkeyConfig(),
         focusStealMode: FocusStealMode = .confirmationNeeded,
-        showAutoAccept: Bool = true,
-        enableAnimations: Bool = true
+        returnFocusWhenEmpty: Bool = true
     ) {
         self.floatingWindow = floatingWindow
         self.showInMenuBar = showInMenuBar
         self.launchAtLogin = launchAtLogin
         self.globalHotkeys = globalHotkeys
         self.focusStealMode = focusStealMode
-        self.showAutoAccept = showAutoAccept
-        self.enableAnimations = enableAnimations
+        self.returnFocusWhenEmpty = returnFocusWhenEmpty
     }
 }
 
-// Server settings format (rules + projects only)
-struct ServerSettings: Codable {
-    var rules: [PermissionRule]
-    var projects: [ProjectConfig]
-
-    init(rules: [PermissionRule] = [], projects: [ProjectConfig] = []) {
-        self.rules = rules
-        self.projects = projects
-    }
-}
-
-// Full app settings including native-specific options
+// Full app settings combining server settings + native-only settings
 struct AppSettings: Codable {
-    var rules: [PermissionRule]
-    var projects: [ProjectConfig]
-    var ui: UISettings
-    var native: NativeSettings
+    var server: ServerSettings
+    var nativeOnly: NativeOnlySettings
 
     init(
-        rules: [PermissionRule] = [],
-        projects: [ProjectConfig] = [],
-        ui: UISettings = UISettings(),
-        native: NativeSettings = NativeSettings()
+        server: ServerSettings = ServerSettings(),
+        nativeOnly: NativeOnlySettings = NativeOnlySettings()
     ) {
-        self.rules = rules
-        self.projects = projects
-        self.ui = ui
-        self.native = native
+        self.server = server
+        self.nativeOnly = nativeOnly
     }
 
     static let defaultSettings = AppSettings()
@@ -169,6 +155,6 @@ struct AppSettings: Codable {
         let configDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config")
             .appendingPathComponent("claude-prompt-ui")
-        return configDir.appendingPathComponent("settings.json")
+        return configDir.appendingPathComponent("native-settings.json")
     }
 }

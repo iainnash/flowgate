@@ -11,21 +11,21 @@
   $: sessionColor = getSessionColor(prompt.sessionId);
   $: allowedPrompts = input.allowedPrompts || [];
 
-  async function handleApprove() {
-    await resolvePrompt(prompt.id, { decision: 'allow' });
+  function handleApprove() {
+    resolvePrompt(prompt.id, { decision: 'allow' });
     dispatch('resolved');
   }
 
-  async function handleDeny() {
-    await resolvePrompt(prompt.id, {
+  function handleDeny() {
+    resolvePrompt(prompt.id, {
       decision: 'deny',
       reason: 'User declined to exit plan mode',
     });
     dispatch('resolved');
   }
 
-  async function handleAskInTerminal() {
-    await resolvePrompt(prompt.id, {
+  function handleAskInTerminal() {
+    resolvePrompt(prompt.id, {
       decision: 'ask',
       reason: 'User wants to decide in terminal',
     });

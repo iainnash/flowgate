@@ -115,6 +115,9 @@ func makePromptHandler(q *queue.Queue) http.HandlerFunc {
 			return
 		}
 
+		// Normalize field names (support both camelCase and snake_case)
+		input.Normalize()
+
 		// Validate required fields
 		if input.SessionID == "" || input.ToolName == "" || input.HookEventName == "" || input.CWD == "" {
 			logVerbose("Missing required fields")
@@ -167,14 +170,19 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 // findPublicDir locates the public directory
 func findPublicDir() string {
-	// Check current directory
+	// Check current directory (when running from go-server/)
 	if _, err := os.Stat("public"); err == nil {
 		return "public"
 	}
 
-	// Check parent directory
-	if _, err := os.Stat("../server/public"); err == nil {
-		return "../server/public"
+	// Check go-server subdirectory (when running from project root)
+	if _, err := os.Stat("go-server/public"); err == nil {
+		return "go-server/public"
+	}
+
+	// Check ui build output (alternative location)
+	if _, err := os.Stat("ui/dist"); err == nil {
+		return "ui/dist"
 	}
 
 	return ""

@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 import * as Tone from 'tone';
-import type { Prompt, Settings, WsMessage, ToolCategory, PermissionRule, LegacySettings, UIPreferences, DevicesResponse } from './types';
-import { DEFAULT_RULES, DEFAULT_UI_PREFS } from './types';
+import type { Prompt, Settings, WsMessage, ToolCategory, UIPreferences, DevicesResponse } from './types';
+import { DEFAULT_UI_PREFS } from './types';
 
 // Complete tool categorization based on Claude Code documentation
 export const TOOL_CATEGORIES = {
@@ -45,55 +45,6 @@ export function isInteractivePrompt(toolName: string): boolean {
   return toolName === 'AskUserQuestion' || toolName === 'ExitPlanMode';
 }
 
-// Check if a rule matches a tool
-export function ruleMatchesTool(rule: PermissionRule, toolName: string): boolean {
-  if (!rule.enabled) return false;
-
-  switch (rule.matchType) {
-    case 'all':
-      return true;
-    case 'category':
-      return getToolCategory(toolName) === rule.matchValue;
-    case 'tool':
-      return toolName === rule.matchValue;
-    case 'pattern':
-      try {
-        return new RegExp(rule.matchValue).test(toolName);
-      } catch {
-        return false;
-      }
-    default:
-      return false;
-  }
-}
-
-// Find the first matching rule for a tool
-export function findMatchingRule(
-  settings: Settings,
-  toolName: string,
-  cwd: string
-): PermissionRule | undefined {
-  // Check project-specific rules first
-  for (const project of settings.projects) {
-    if (cwd.startsWith(project.projectPath)) {
-      for (const rule of project.rules) {
-        if (ruleMatchesTool(rule, toolName)) {
-          return rule;
-        }
-      }
-    }
-  }
-
-  // Then check global rules
-  for (const rule of settings.rules) {
-    if (ruleMatchesTool(rule, toolName)) {
-      return rule;
-    }
-  }
-
-  return undefined;
-}
-
 // Prompts store
 export const prompts = writable<Prompt[]>([]);
 
@@ -116,145 +67,40 @@ export function markAutoAccepted(id: string): void {
   autoAccepted.set(new Set(autoAcceptedIds));
 }
 
-// Settings store with localStorage persistence
-const SETTINGS_KEY = 'claude-prompt-ui-settings';
+// Settings store - synced with server, not persisted locally
+export const settings = writable<Settings>({
+  rules: [],
+  native: {
+    showAutoAccept: true,
+    enableAnimations: true,
+  },
+});
 
-function createDefaultSettings(): Settings {
-  return {
-    rules: DEFAULT_RULES.map(r => ({ ...r, id: crypto.randomUUID() })),
-    projects: [],
-    ui: { ...DEFAULT_UI_PREFS },
-  };
-}
+// UI preferences stored locally (not sent to server)
+const UI_PREFS_KEY = 'claude-prompt-ui-prefs';
 
-// Migrate legacy settings to new rules format
-function migrateLegacySettings(legacy: LegacySettings): Settings {
-  const timeout = legacy.autoAcceptTimeout ?? 10;
-  const rules: PermissionRule[] = [];
-
-  // Interactive always requires verify
-  rules.push({
-    id: crypto.randomUUID(),
-    name: 'Interactive prompts',
-    matchType: 'category',
-    matchValue: 'interactive',
-    action: { type: 'require-verify' },
-    enabled: true,
-  });
-
-  // Handle old autoAccept object format
-  if (legacy.autoAccept) {
-    const categories: ToolCategory[] = ['read', 'write', 'execute', 'web', 'mcp', 'other'];
-    for (const cat of categories) {
-      const enabled = legacy.autoAccept[cat];
-      rules.push({
-        id: crypto.randomUUID(),
-        name: `${cat.charAt(0).toUpperCase() + cat.slice(1)} operations`,
-        matchType: 'category',
-        matchValue: cat,
-        action: enabled ? { type: 'accept-after', seconds: timeout } : { type: 'require-verify' },
-        enabled: true,
-      });
-    }
-  } else if ('autoAcceptCodeChanges' in legacy || 'autoAcceptToolCalls' in legacy) {
-    // Very old format
-    const readEnabled = legacy.autoAcceptToolCalls ?? true;
-    const writeEnabled = legacy.autoAcceptCodeChanges ?? false;
-
-    rules.push(
-      {
-        id: crypto.randomUUID(),
-        name: 'Read operations',
-        matchType: 'category',
-        matchValue: 'read',
-        action: readEnabled ? { type: 'accept-after', seconds: timeout } : { type: 'require-verify' },
-        enabled: true,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'File writes',
-        matchType: 'category',
-        matchValue: 'write',
-        action: writeEnabled ? { type: 'accept-after', seconds: timeout } : { type: 'require-verify' },
-        enabled: true,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'Command execution',
-        matchType: 'category',
-        matchValue: 'execute',
-        action: readEnabled ? { type: 'accept-after', seconds: timeout } : { type: 'require-verify' },
-        enabled: true,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'Web requests',
-        matchType: 'category',
-        matchValue: 'web',
-        action: { type: 'accept-after', seconds: timeout },
-        enabled: true,
-      },
-      {
-        id: crypto.randomUUID(),
-        name: 'MCP tools',
-        matchType: 'category',
-        matchValue: 'mcp',
-        action: { type: 'require-verify' },
-        enabled: true,
-      }
-    );
-  }
-
-  // Catch-all rule
-  rules.push({
-    id: crypto.randomUUID(),
-    name: 'Everything else',
-    matchType: 'all',
-    matchValue: '*',
-    action: { type: 'require-verify' },
-    enabled: true,
-  });
-
-  return { rules, projects: [], ui: { ...DEFAULT_UI_PREFS } };
-}
-
-function loadSettings(): Settings {
+function loadUIPrefs(): UIPreferences {
   try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
+    const stored = localStorage.getItem(UI_PREFS_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored);
-
-      // Check if it's the new format (has 'rules' array)
-      if ('rules' in parsed && Array.isArray(parsed.rules)) {
-        return {
-          rules: parsed.rules,
-          projects: parsed.projects ?? [],
-          ui: { ...DEFAULT_UI_PREFS, ...parsed.ui },
-        };
-      }
-
-      // Otherwise migrate from legacy format
-      return migrateLegacySettings(parsed as LegacySettings);
+      return { ...DEFAULT_UI_PREFS, ...JSON.parse(stored) };
     }
   } catch {
     // Ignore parse errors
   }
-  return createDefaultSettings();
+  return DEFAULT_UI_PREFS;
 }
 
-export const settings = writable<Settings>(loadSettings());
+export const uiPrefs = writable<UIPreferences>(loadUIPrefs());
 
-settings.subscribe((value) => {
+uiPrefs.subscribe((value) => {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(value));
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(value));
   } catch {
     // Ignore storage errors
   }
+  // Note: Volume updates are handled reactively in App.svelte via $: updateVolume($uiPrefs.volume)
 });
-
-export function updateSettings(partial: Partial<Settings>): void {
-  settings.update((s) => ({ ...s, ...partial }));
-}
 
 // Session colors for multi-instance support
 const SESSION_COLORS = [
@@ -343,11 +189,14 @@ function handleMessage(message: WsMessage): void {
     case 'prompts:list':
       prompts.set(message.prompts);
       break;
-    case 'settings:updated':
-      settings.set(message.settings);
-      break;
     case 'pause:changed':
       globalPaused.set(message.isPaused);
+      break;
+    case 'settings:updated':
+      // Update settings when server broadcasts changes
+      if (message.settings) {
+        settings.set(message.settings);
+      }
       break;
   }
 }
@@ -359,6 +208,25 @@ let audioInitialized = false;
 // 80s-style synth sounds using Tone.js
 let synths: Record<string, Tone.Synth | Tone.PolySynth> = {};
 let audioInitializing = false;
+
+// Convert 0-100 volume to dB offset (-Infinity to 0)
+function volumeToDb(volume: number): number {
+  if (volume <= 0) return -Infinity;
+  // Map 0-100 to -40dB to 0dB range
+  return -40 + (volume / 100) * 40;
+}
+
+// Update all synth volumes
+export function updateVolume(volume: number): void {
+  if (!audioInitialized) return;
+  const dbOffset = volumeToDb(volume);
+  // Base volumes + offset
+  if (synths.read) synths.read.volume.value = -12 + dbOffset + 40;
+  if (synths.write) synths.write.volume.value = -10 + dbOffset + 40;
+  if (synths.execute) synths.execute.volume.value = -8 + dbOffset + 40;
+  if (synths.prompt) (synths.prompt as Tone.PolySynth).volume.value = -10 + dbOffset + 40;
+  if (synths.other) synths.other.volume.value = -12 + dbOffset + 40;
+}
 
 function initAudio(): void {
   if (audioInitialized || audioInitializing) return;
@@ -404,39 +272,20 @@ function initAudio(): void {
     audioInitialized = true;
     audioInitializing = false;
 
-    // Apply initial volume from settings
-    const currentSettings = get(settings);
-    updateVolume(currentSettings.ui.volume);
+    // Apply initial volume from UI prefs
+    const currentPrefs = get(uiPrefs);
+    updateVolume(currentPrefs.volume);
   }).catch(() => {
     audioInitializing = false;
   });
-}
-
-// Convert 0-100 volume to dB offset (-Infinity to 0)
-function volumeToDb(volume: number): number {
-  if (volume <= 0) return -Infinity;
-  // Map 0-100 to -40dB to 0dB range
-  return -40 + (volume / 100) * 40;
-}
-
-// Update all synth volumes
-export function updateVolume(volume: number): void {
-  if (!audioInitialized) return;
-  const dbOffset = volumeToDb(volume);
-  // Base volumes + offset
-  if (synths.read) synths.read.volume.value = -12 + dbOffset + 40;
-  if (synths.write) synths.write.volume.value = -10 + dbOffset + 40;
-  if (synths.execute) synths.execute.volume.value = -8 + dbOffset + 40;
-  if (synths.prompt) (synths.prompt as Tone.PolySynth).volume.value = -10 + dbOffset + 40;
-  if (synths.other) synths.other.volume.value = -12 + dbOffset + 40;
 }
 
 function playToolSound(category: 'read' | 'write' | 'execute' | 'prompt' | 'other'): void {
   if (!audioInitialized) return;
 
   // Check if muted
-  const currentSettings = get(settings);
-  if (currentSettings.ui.volume <= 0) return;
+  const currentPrefs = get(uiPrefs);
+  if (currentPrefs.volume <= 0) return;
 
   const now = Tone.now();
   const step = 0.08; // Arp step timing
@@ -504,13 +353,18 @@ function toolCategoryToSoundCategory(category: import('./types').ToolCategory): 
 }
 
 function notifyNewPrompt(prompt: Prompt): void {
-  // Play synth sound based on tool category
-  const category = getToolCategory(prompt.toolName);
-  const soundCategory = toolCategoryToSoundCategory(category);
-  playToolSound(soundCategory);
+  // Don't play sound for auto-accept prompts
+  const shouldPlaySound = prompt.acceptType !== 'auto-accept';
 
-  // Browser notification
-  if (notificationPermission === 'granted') {
+  if (shouldPlaySound) {
+    // Play synth sound based on tool category
+    const category = getToolCategory(prompt.toolName);
+    const soundCategory = toolCategoryToSoundCategory(category);
+    playToolSound(soundCategory);
+  }
+
+  // Browser notification (only for non-auto-accept)
+  if (shouldPlaySound && notificationPermission === 'granted') {
     new Notification('Claude Prompt', {
       body: `${prompt.toolName}: ${getPromptDescription(prompt)}`,
       icon: '/favicon.ico',
@@ -576,27 +430,31 @@ export function getPromptDisplayIndex(promptId: string, allPrompts: Prompt[]): s
   return '5+';
 }
 
-// API helpers
-const API_BASE = '/api';
+// API helpers - all use WebSocket now
+export function resolvePrompt(id: string, decision: { decision: 'allow' | 'deny' | 'ask'; reason?: string; updatedInput?: Record<string, unknown> }): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('WebSocket not connected, cannot resolve prompt');
+    return;
+  }
 
-export async function resolvePrompt(id: string, decision: { decision: 'allow' | 'deny' | 'ask'; reason?: string; updatedInput?: Record<string, unknown> }): Promise<void> {
-  await fetch(`${API_BASE}/prompts/${id}/resolve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(decision),
-  });
+  ws.send(JSON.stringify({
+    type: 'resolve',
+    id,
+    decision,
+  }));
 }
 
-export async function saveSettings(newSettings: Settings): Promise<void> {
-  await fetch(`${API_BASE}/settings`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newSettings),
-  });
+export function updateSettings(newSettings: Settings): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  ws.send(JSON.stringify({
+    type: 'updateSettings',
+    settings: newSettings
+  }));
 }
 
-export async function togglePauseAll(): Promise<void> {
-  await fetch(`${API_BASE}/pause`, {
-    method: 'POST',
-  });
+export function togglePauseAll(): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'togglePause' }));
+  }
 }

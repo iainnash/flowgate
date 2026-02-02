@@ -1,4 +1,4 @@
-// Prompt acceptance types
+// Prompt acceptance types matching Go server
 export type PromptAcceptType = 'auto-accept' | 'accept-after' | 'manual';
 
 export interface Prompt {
@@ -8,10 +8,10 @@ export interface Prompt {
   toolInput: Record<string, unknown>;
   hookEventName: string;
   cwd: string;
-  createdAt: number;
-  acceptType: PromptAcceptType;  // How this prompt should be accepted
-  autoAcceptIn?: number;  // Seconds until auto-accept (only for accept-after type)
-  autoAcceptAt?: number;  // Unix timestamp (ms) when prompt will auto-accept (server-managed)
+  createdAt: number;  // milliseconds
+  acceptType: PromptAcceptType;
+  autoAcceptIn?: number;  // seconds (only for display)
+  autoAcceptAt?: number;  // milliseconds (only for accept-after)
 }
 
 // AskUserQuestion tool input structure
@@ -53,32 +53,33 @@ export function isExitPlanMode(prompt: Prompt): prompt is Prompt & { toolInput: 
 
 export type ToolCategory = 'read' | 'write' | 'execute' | 'web' | 'interactive' | 'mcp' | 'other';
 
-// Rule matching types
-export type RuleMatchType = 'category' | 'tool' | 'pattern' | 'all';
+// Simplified settings matching Go server schema
+export interface Settings {
+  rules: Rule[];
+  native: NativeSettings;
+}
 
-// Rule actions
-export type RuleAction =
-  | { type: 'auto-accept' }
-  | { type: 'accept-after'; seconds: number }
-  | { type: 'require-verify' };
-
-// A single permission rule
-export interface PermissionRule {
-  id: string;
+export interface Rule {
   name: string;
-  matchType: RuleMatchType;
-  matchValue: string; // category name, tool name, or regex pattern
+  toolName: string;
+  category?: string;
+  pattern?: string;
   action: RuleAction;
   enabled: boolean;
+  matchCount: number;
 }
 
-// Project-specific settings
-export interface ProjectConfig {
-  projectPath: string;
-  rules: PermissionRule[];
+export interface RuleAction {
+  type: 'manual' | 'auto-accept' | 'accept-after';
+  seconds?: number;
 }
 
-// UI preferences
+export interface NativeSettings {
+  showAutoAccept: boolean;
+  enableAnimations: boolean;
+}
+
+// UI preferences stored in localStorage (not sent to server)
 export interface UIPreferences {
   theme: 'dark' | 'light';
   volume: number; // 0-100, 0 = muted
@@ -87,25 +88,6 @@ export interface UIPreferences {
 export const DEFAULT_UI_PREFS: UIPreferences = {
   theme: 'dark',
   volume: 50,
-};
-
-// Main settings structure
-export interface Settings {
-  rules: PermissionRule[];
-  projects: ProjectConfig[];
-  ui: UIPreferences;
-}
-
-// Legacy types for migration
-export type AutoAcceptSettings = {
-  [K in ToolCategory]?: boolean;
-};
-
-export interface LegacySettings {
-  autoAcceptTimeout: number;
-  autoAccept?: AutoAcceptSettings;
-  autoAcceptCodeChanges?: boolean;
-  autoAcceptToolCalls?: boolean;
 }
 
 export interface Decision {
@@ -118,43 +100,15 @@ export type WsMessage =
   | { type: 'prompt:new'; prompt: Prompt }
   | { type: 'prompt:resolved'; id: string; autoAccepted?: boolean }
   | { type: 'prompt:updated'; prompt: Prompt }
-  | { type: 'settings:updated'; settings: Settings }
   | { type: 'prompts:list'; prompts: Prompt[] }
-  | { type: 'pause:changed'; isPaused: boolean };
+  | { type: 'pause:changed'; isPaused: boolean }
+  | { type: 'settings:updated'; settings: Settings };
 
 export const CODE_CHANGE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 
 export function isCodeChange(toolName: string): boolean {
   return CODE_CHANGE_TOOLS.has(toolName);
 }
-
-// Helper to create a default rule
-export function createDefaultRule(
-  matchType: RuleMatchType,
-  matchValue: string,
-  action: RuleAction,
-  name?: string
-): PermissionRule {
-  return {
-    id: crypto.randomUUID(),
-    name: name ?? `${matchType}: ${matchValue}`,
-    matchType,
-    matchValue,
-    action,
-    enabled: true,
-  };
-}
-
-// Default rules that provide safe defaults
-export const DEFAULT_RULES: PermissionRule[] = [
-  createDefaultRule('category', 'interactive', { type: 'require-verify' }, 'Interactive prompts'),
-  createDefaultRule('category', 'read', { type: 'accept-after', seconds: 3 }, 'Read operations'),
-  createDefaultRule('category', 'web', { type: 'accept-after', seconds: 5 }, 'Web requests'),
-  createDefaultRule('category', 'write', { type: 'accept-after', seconds: 10 }, 'File writes'),
-  createDefaultRule('category', 'execute', { type: 'require-verify' }, 'Command execution'),
-  createDefaultRule('category', 'mcp', { type: 'require-verify' }, 'MCP tools'),
-  createDefaultRule('all', '*', { type: 'require-verify' }, 'Everything else'),
-];
 
 // Device status types
 export interface DeviceStatus {

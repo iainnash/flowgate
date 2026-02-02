@@ -5,10 +5,11 @@ import SwiftUI
 class SettingsManager: ObservableObject {
     @Published var settings: AppSettings = AppSettings.defaultSettings
 
-    private let httpClient = HTTPClient()
+    private let webSocket: WebSocketClient
     private var fileWatcher: DispatchSourceFileSystemObject?
 
-    init() {
+    init(webSocket: WebSocketClient) {
+        self.webSocket = webSocket
         loadFromFile()
         watchSettingsFile()
     }
@@ -53,25 +54,15 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    func syncWithServer() async {
-        do {
-            let serverSettings = try await httpClient.fetchSettings()
-            // Merge server settings (rules, projects) with native settings
-            settings.rules = serverSettings.rules
-            settings.projects = serverSettings.projects
-            saveToFile()
-        } catch {
-            print("Failed to sync settings from server: \(error)")
-        }
+    func updateServerSettings(_ serverSettings: ServerSettings) {
+        // Update from server via WebSocket
+        settings.server = serverSettings
+        saveToFile()
     }
 
-    func pushToServer() async {
-        do {
-            let serverSettings = ServerSettings(rules: settings.rules, projects: settings.projects)
-            try await httpClient.updateSettings(serverSettings)
-        } catch {
-            print("Failed to push settings to server: \(error)")
-        }
+    func pushToServer() {
+        // Send settings to server via WebSocket
+        webSocket.sendUpdateSettings(settings.server)
     }
 
     private func watchSettingsFile() {
@@ -107,27 +98,27 @@ class SettingsManager: ObservableObject {
         fileWatcher = source
     }
 
-    // Convenience methods for native settings
+    // Convenience methods for native-only settings
     var floatingWindow: Bool {
-        get { settings.native.floatingWindow }
+        get { settings.nativeOnly.floatingWindow }
         set {
-            settings.native.floatingWindow = newValue
+            settings.nativeOnly.floatingWindow = newValue
             saveToFile()
         }
     }
 
     var showInMenuBar: Bool {
-        get { settings.native.showInMenuBar }
+        get { settings.nativeOnly.showInMenuBar }
         set {
-            settings.native.showInMenuBar = newValue
+            settings.nativeOnly.showInMenuBar = newValue
             saveToFile()
         }
     }
 
     var launchAtLogin: Bool {
-        get { settings.native.launchAtLogin }
+        get { settings.nativeOnly.launchAtLogin }
         set {
-            settings.native.launchAtLogin = newValue
+            settings.nativeOnly.launchAtLogin = newValue
             saveToFile()
         }
     }

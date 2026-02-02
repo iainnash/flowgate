@@ -1,5 +1,5 @@
 packages:
   - 'hooks'
-  - 'server'
   - 'ui'
+  - 'stream-deck'
   - 'e2e'

@@ -70,9 +70,10 @@ struct MenuBarView: View {
 
 struct MenuBarView_Previews: PreviewProvider {
     static var previews: some View {
+        let ws = WebSocketClient()
         MenuBarView(
-            promptManager: PromptManager(),
-            settingsManager: SettingsManager(),
+            promptManager: PromptManager(webSocket: ws),
+            settingsManager: SettingsManager(webSocket: ws),
             onShowWindow: {},
             onQuit: {}
         )

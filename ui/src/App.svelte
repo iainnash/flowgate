@@ -7,6 +7,7 @@
     prompts,
     connected,
     settings,
+    uiPrefs,
     connectWebSocket,
     requestNotificationPermission,
     updateVolume,
@@ -37,32 +38,32 @@
 
   // Apply theme to document
   $: {
-    document.documentElement.setAttribute('data-theme', $settings.ui.theme);
+    document.documentElement.setAttribute('data-theme', $uiPrefs.theme);
   }
 
-  // Update volume when settings change
-  $: updateVolume($settings.ui.volume);
+  // Update volume when UI prefs change
+  $: updateVolume($uiPrefs.volume);
 
   function toggleTheme() {
-    settings.update(s => ({
-      ...s,
-      ui: { ...s.ui, theme: s.ui.theme === 'dark' ? 'light' : 'dark' }
+    uiPrefs.update(prefs => ({
+      ...prefs,
+      theme: prefs.theme === 'dark' ? 'light' : 'dark'
     }));
   }
 
   function toggleMute() {
-    settings.update(s => ({
-      ...s,
-      ui: { ...s.ui, volume: s.ui.volume > 0 ? 0 : 50 }
+    uiPrefs.update(prefs => ({
+      ...prefs,
+      volume: prefs.volume > 0 ? 0 : 50
     }));
   }
 
   function handleVolumeChange(e: Event) {
     const target = e.target as HTMLInputElement;
     const volume = parseInt(target.value, 10);
-    settings.update(s => ({
-      ...s,
-      ui: { ...s.ui, volume }
+    uiPrefs.update(prefs => ({
+      ...prefs,
+      volume
     }));
   }
 
@@ -73,19 +74,19 @@
   });
 </script>
 
-<main class:light={$settings.ui.theme === 'light'}>
+<main class:light={$uiPrefs.theme === 'light'}>
   <header>
     <h1>Claude Prompt UI</h1>
     <div class="header-right">
       <div class="volume-control">
-        <button class="icon-btn" on:click={toggleMute} title={$settings.ui.volume > 0 ? 'Mute' : 'Unmute'}>
-          {#if $settings.ui.volume === 0}
+        <button class="icon-btn" on:click={toggleMute} title={$uiPrefs.volume > 0 ? 'Mute' : 'Unmute'}>
+          {#if $uiPrefs.volume === 0}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 5L6 9H2v6h4l5 4V5z"/>
               <line x1="23" y1="9" x2="17" y2="15"/>
               <line x1="17" y1="9" x2="23" y2="15"/>
             </svg>
-          {:else if $settings.ui.volume < 50}
+          {:else if $uiPrefs.volume < 50}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 5L6 9H2v6h4l5 4V5z"/>
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
@@ -101,7 +102,7 @@
           type="range"
           min="0"
           max="100"
-          value={$settings.ui.volume}
+          value={$uiPrefs.volume}
           on:input={handleVolumeChange}
           class="volume-slider"
         />
@@ -119,7 +120,7 @@
         {/if}
       </button>
       <button class="icon-btn" on:click={toggleTheme} title="Toggle theme">
-        {#if $settings.ui.theme === 'dark'}
+        {#if $uiPrefs.theme === 'dark'}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="5"/>
             <line x1="12" y1="1" x2="12" y2="3"/>

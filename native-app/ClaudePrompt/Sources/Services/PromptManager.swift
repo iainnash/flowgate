@@ -9,8 +9,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
     @Published var connectionStatus: String = "Disconnected"
     @Published var isPaused = false
 
-    private let webSocket = WebSocketClient()
-    private let httpClient = HTTPClient()
+    private let webSocket: WebSocketClient
+    var settingsManager: SettingsManager?
 
     // Session colors for multi-instance support
     private var sessionColors: [String: Color] = [:]
@@ -40,7 +40,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
 
     var currentPrompt: Prompt? { sortedPrompts.first }
 
-    init() {
+    init(webSocket: WebSocketClient) {
+        self.webSocket = webSocket
         webSocket.delegate = self
     }
 
@@ -53,13 +54,7 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
     }
 
     func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil) {
-        Task {
-            do {
-                try await httpClient.resolvePrompt(id: prompt.id, decision: decision, reason: reason)
-            } catch {
-                print("Failed to resolve prompt: \(error)")
-            }
-        }
+        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason)
     }
 
     func acceptCurrent() {
@@ -78,16 +73,6 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         }
     }
 
-    func pauseTimer(for prompt: Prompt) {
-        Task {
-            do {
-                try await httpClient.pauseTimer(id: prompt.id)
-            } catch {
-                print("Failed to pause timer: \(error)")
-            }
-        }
-    }
-
     func denyAll() {
         for prompt in prompts {
             resolvePrompt(prompt, decision: .deny)
@@ -95,14 +80,7 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
     }
 
     func togglePauseAll() {
-        Task {
-            do {
-                _ = try await httpClient.togglePauseAll()
-                // State will be updated via WebSocket
-            } catch {
-                print("Failed to toggle pause: \(error)")
-            }
-        }
+        webSocket.sendTogglePause()
     }
 
     func colorForSession(_ sessionId: String) -> Color {
@@ -141,9 +119,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
             case .promptsList(let promptList):
                 prompts = promptList
 
-            case .settingsUpdated:
-                // Settings updates handled by SettingsManager
-                break
+            case .settingsUpdated(let serverSettings):
+                settingsManager?.updateServerSettings(serverSettings)
 
             case .pauseChanged(let paused):
                 isPaused = paused

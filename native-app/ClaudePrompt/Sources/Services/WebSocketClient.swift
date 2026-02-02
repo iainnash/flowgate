@@ -134,6 +134,53 @@ class WebSocketClient: NSObject, ObservableObject {
         decoder.dateDecodingStrategy = .millisecondsSince1970
         return try decoder.decode(Prompt.self, from: jsonData)
     }
+
+    // MARK: - Send Messages
+
+    func sendResolve(id: String, decision: Decision, reason: String? = nil) {
+        var decisionData: [String: Any] = ["decision": decision.rawValue]
+        if let reason = reason {
+            decisionData["reason"] = reason
+        }
+
+        let message: [String: Any] = [
+            "type": "resolve",
+            "id": id,
+            "decision": decisionData
+        ]
+
+        sendMessage(message)
+    }
+
+    func sendTogglePause() {
+        let message: [String: Any] = [
+            "type": "togglePause"
+        ]
+        sendMessage(message)
+    }
+
+    func sendUpdateSettings(_ settings: ServerSettings) {
+        guard let settingsData = try? JSONEncoder().encode(settings),
+              let settingsJSON = try? JSONSerialization.jsonObject(with: settingsData) else {
+            return
+        }
+
+        let message: [String: Any] = [
+            "type": "updateSettings",
+            "settings": settingsJSON
+        ]
+        sendMessage(message)
+    }
+
+    private func sendMessage(_ message: [String: Any]) {
+        guard isConnected,
+              let data = try? JSONSerialization.data(withJSONObject: message),
+              let text = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        socket?.write(string: text)
+    }
 }
 
 extension WebSocketClient: Starscream.WebSocketDelegate {

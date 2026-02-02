@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter ui dev\"",
-    "build": "pnpm -r build",
+    "dev": "concurrently \"./scripts/dev-server.sh\" \"pnpm --filter ui dev\"",
+    "dev:server": "./scripts/dev-server.sh",
+    "dev:stream-deck": "pnpm --filter stream-deck-client dev",
+    "build": "pnpm -r build && cd go-server && make build && cd ../hooks && make build",
+    "build:server": "cd go-server && make build",
+    "build:hook": "cd hooks && make build",
+    "build:stream-deck": "pnpm --filter stream-deck-client build",
     "test": "pnpm -r test",
     "test:watch": "pnpm -r test:watch",
     "test:coverage": "pnpm -r test:coverage",
     "test:e2e": "playwright test",
-    "test:ci": "pnpm test && pnpm test:e2e",
-    "install-hooks": "pnpm --filter hooks install-hooks"
+    "test:ci": "pnpm test && pnpm test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "^1.41.0",

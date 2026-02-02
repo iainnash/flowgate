@@ -311,18 +311,89 @@ func (q *Queue) UpdateSettings(updates *models.Settings) *models.Settings {
 
 // matchRules finds the first matching rule for a tool
 func (q *Queue) matchRules(toolName string, toolInput map[string]interface{}) models.RuleAction {
-	// Default to manual approval
-	for _, rule := range q.settings.Rules {
+	category := getToolCategory(toolName)
+
+	for i := range q.settings.Rules {
+		rule := &q.settings.Rules[i]
 		if !rule.Enabled {
 			continue
 		}
-		if rule.ToolName == toolName {
+
+		// Check tool name match
+		if rule.ToolName != "" && rule.ToolName == toolName {
+			rule.MatchCount++
 			return rule.Action
 		}
+
+		// Check category match
+		if rule.Category != "" && rule.Category == category {
+			rule.MatchCount++
+			return rule.Action
+		}
+
+		// Pattern matching not implemented yet
+		// TODO: Add JavaScript expression evaluation for patterns
 	}
 
 	// Default: manual approval
 	return models.RuleAction{Type: "manual"}
+}
+
+// getToolCategory returns the category for a tool
+func getToolCategory(toolName string) string {
+	// MCP tools
+	if len(toolName) >= 5 && toolName[:5] == "mcp__" {
+		return "mcp"
+	}
+
+	// Read tools
+	readTools := map[string]bool{
+		"Read": true, "Glob": true, "Grep": true,
+		"TaskList": true, "TaskGet": true, "TaskOutput": true,
+		"ListMcpResourcesTool": true, "ReadMcpResourceTool": true,
+		"ToolSearch": true,
+	}
+	if readTools[toolName] {
+		return "read"
+	}
+
+	// Write tools
+	writeTools := map[string]bool{
+		"Edit": true, "Write": true, "NotebookEdit": true,
+		"TaskCreate": true, "TaskUpdate": true,
+	}
+	if writeTools[toolName] {
+		return "write"
+	}
+
+	// Execute tools
+	executeTools := map[string]bool{
+		"Bash": true, "KillShell": true,
+		"Task": true, "Skill": true,
+	}
+	if executeTools[toolName] {
+		return "execute"
+	}
+
+	// Web tools
+	webTools := map[string]bool{
+		"WebFetch": true, "WebSearch": true,
+	}
+	if webTools[toolName] {
+		return "web"
+	}
+
+	// Interactive tools
+	interactiveTools := map[string]bool{
+		"AskUserQuestion": true,
+		"ExitPlanMode":    true,
+		"EnterPlanMode":   true,
+	}
+	if interactiveTools[toolName] {
+		return "interactive"
+	}
+
+	return "other"
 }
 
 // Helper function

@@ -37,3 +37,12 @@ Thumbs.db
 npm-debug.log*
 
 server/public
+
+# Go binaries
+go-server/claude-prompt-server
+go-server/claude-prompt-server-*
+go-server/claude-prompt-ui
+hooks/prompt-hook
+
+# UI build output (served by Go server)
+go-server/public/

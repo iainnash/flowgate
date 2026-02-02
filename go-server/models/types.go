@@ -29,12 +29,35 @@ type Prompt struct {
 }
 
 // HookInput is the input from Claude Code hook
+// Supports both camelCase (from Go hook) and snake_case (from TS hook) for compatibility
 type HookInput struct {
-	SessionID     string                 `json:"session_id"`
-	ToolName      string                 `json:"tool_name"`
-	ToolInput     map[string]interface{} `json:"tool_input"`
-	HookEventName string                 `json:"hook_event_name"`
+	SessionID     string                 `json:"sessionId"`
+	ToolName      string                 `json:"toolName"`
+	ToolInput     map[string]interface{} `json:"toolInput"`
+	HookEventName string                 `json:"hookEventName"`
 	CWD           string                 `json:"cwd"`
+
+	// Legacy snake_case support
+	SessionIDSnake     string                 `json:"session_id"`
+	ToolNameSnake      string                 `json:"tool_name"`
+	ToolInputSnake     map[string]interface{} `json:"tool_input"`
+	HookEventNameSnake string                 `json:"hook_event_name"`
+}
+
+// Normalize ensures fields are populated from either naming convention
+func (h *HookInput) Normalize() {
+	if h.SessionID == "" && h.SessionIDSnake != "" {
+		h.SessionID = h.SessionIDSnake
+	}
+	if h.ToolName == "" && h.ToolNameSnake != "" {
+		h.ToolName = h.ToolNameSnake
+	}
+	if h.ToolInput == nil && h.ToolInputSnake != nil {
+		h.ToolInput = h.ToolInputSnake
+	}
+	if h.HookEventName == "" && h.HookEventNameSnake != "" {
+		h.HookEventName = h.HookEventNameSnake
+	}
 }
 
 // Decision represents a resolution decision

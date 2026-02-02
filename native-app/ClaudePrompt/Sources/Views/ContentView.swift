@@ -13,7 +13,7 @@ struct ContentView: View {
     // Filter prompts based on showAutoAccept setting
     var filteredPrompts: [Prompt] {
         let sorted = promptManager.sortedPrompts
-        if settingsManager.settings.native.showAutoAccept {
+        if settingsManager.settings.server.native.showAutoAccept {
             return sorted
         } else {
             return sorted.filter { $0.acceptType == .manual }
@@ -157,8 +157,10 @@ struct ContentView: View {
                 Image(systemName: promptManager.isPaused ? "play.fill" : "pause.fill")
                     .font(.title3)
                     .foregroundColor(promptManager.isPaused ? .orange : .green)
+                    .padding(4)  // Add padding around icon to give focus ring more space
             }
             .buttonStyle(.borderless)
+            .focusable(false)  // Remove from focus cycle
             .help(promptManager.isPaused ? "Resume auto-accept" : "Pause auto-accept")
 
             // Quick actions menu
@@ -223,29 +225,7 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(Array(filteredPrompts.enumerated()), id: \.element.id) { index, prompt in
-                        PromptCardView(
-                            prompt: prompt,
-                            sessionColor: promptManager.colorForSession(prompt.sessionId),
-                            isActive: index == selectedIndex,
-                            windowFocused: controlActiveState == .key,
-                            enableAnimations: settingsManager.settings.native.enableAnimations,
-                            onAccept: {
-                                promptManager.resolvePrompt(prompt, decision: .allow)
-                            },
-                            onDeny: {
-                                promptManager.resolvePrompt(prompt, decision: .deny)
-                            },
-                            onAcceptWithReason: { reason in
-                                promptManager.resolvePrompt(prompt, decision: .allow, reason: reason)
-                            },
-                            onDenyWithReason: { reason in
-                                promptManager.resolvePrompt(prompt, decision: .deny, reason: reason)
-                            }
-                        )
-                        .id(prompt.id)
-                        .onTapGesture {
-                            selectedIndex = index
-                        }
+                        promptCard(for: prompt, at: index)
                     }
                 }
                 .padding()
@@ -258,6 +238,32 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func promptCard(for prompt: Prompt, at index: Int) -> some View {
+        PromptCardView(
+            prompt: prompt,
+            sessionColor: promptManager.colorForSession(prompt.sessionId),
+            isActive: index == selectedIndex,
+            windowFocused: controlActiveState == .key,
+            enableAnimations: settingsManager.settings.server.native.enableAnimations,
+            onAccept: {
+                promptManager.resolvePrompt(prompt, decision: .allow)
+            },
+            onDeny: {
+                promptManager.resolvePrompt(prompt, decision: .deny)
+            },
+            onAcceptWithReason: { reason in
+                promptManager.resolvePrompt(prompt, decision: .allow, reason: reason)
+            },
+            onDenyWithReason: { reason in
+                promptManager.resolvePrompt(prompt, decision: .deny, reason: reason)
+            }
+        )
+        .id(prompt.id)
+        .onTapGesture {
+            selectedIndex = index
         }
     }
 
@@ -313,9 +319,10 @@ struct ContentView: View {
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
+        let ws = WebSocketClient()
         ContentView(
-            promptManager: PromptManager(),
-            settingsManager: SettingsManager()
+            promptManager: PromptManager(webSocket: ws),
+            settingsManager: SettingsManager(webSocket: ws)
         )
     }
 }

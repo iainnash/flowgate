@@ -14,11 +14,15 @@
   let mode: 'deny' | 'modify' = 'deny';
   let denyReason = '';
   let modifiedInput = '';
+  let wasOpen = false;
 
-  $: if (open) {
+  // Only reset when transitioning from closed to open
+  $: if (open && !wasOpen) {
     modifiedInput = JSON.stringify(prompt.toolInput, null, 2);
     denyReason = '';
+    mode = 'deny';
   }
+  $: wasOpen = open;
 
   function handleDeny() {
     dispatch('deny', { reason: denyReason || 'Denied by user' });
