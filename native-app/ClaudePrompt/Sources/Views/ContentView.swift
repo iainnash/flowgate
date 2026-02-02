@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var selectedPromptForOther: Prompt?
     @State private var otherReason = ""
     @State private var selectedIndex: Int = 0
+    @State private var previousPromptCount: Int = 0
     @Environment(\.controlActiveState) private var controlActiveState
 
     // Filter prompts based on showAutoAccept setting
@@ -49,6 +50,17 @@ struct ContentView: View {
             if selectedIndex >= newCount {
                 selectedIndex = max(0, newCount - 1)
             }
+
+            // Return focus to previous app if enabled and prompts just became empty
+            if settingsManager.settings.nativeOnly.returnFocusWhenEmpty &&
+               previousPromptCount > 0 && newCount == 0 {
+                // Deactivate app to return focus to previous application
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.hide(nil)
+                }
+            }
+
+            previousPromptCount = newCount
         }
     }
 
