@@ -164,11 +164,10 @@ struct SettingsView: View {
                             Text(mode.displayName).tag(mode)
                         }
                     }
+                    .pickerStyle(.menu)
 
                     Toggle("Return focus when empty", isOn: $returnFocusWhenEmpty)
                         .help("Automatically return focus to the previous app when all prompts are cleared")
-                }
-                    .pickerStyle(.menu)
 
                     Toggle("Show auto-accept prompts", isOn: $showAutoAccept)
                     Toggle("Enable animations", isOn: $enableAnimations)

@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -319,24 +320,86 @@ func (q *Queue) matchRules(toolName string, toolInput map[string]interface{}) mo
 			continue
 		}
 
-		// Check tool name match
-		if rule.ToolName != "" && rule.ToolName == toolName {
+		// All specified criteria must match
+		matches := true
+
+		// Check tool name match (if specified)
+		if rule.ToolName != "" && rule.ToolName != toolName {
+			matches = false
+		}
+
+		// Check category match (if specified)
+		if rule.Category != "" && rule.Category != category {
+			matches = false
+		}
+
+		// Check pattern match (if specified)
+		if rule.Pattern != "" && !matchesPattern(rule.Pattern, toolName, toolInput) {
+			matches = false
+		}
+
+		// Rule must have at least one criterion specified
+		hasAnyCriteria := rule.ToolName != "" || rule.Category != "" || rule.Pattern != ""
+
+		if matches && hasAnyCriteria {
 			rule.MatchCount++
 			return rule.Action
 		}
-
-		// Check category match
-		if rule.Category != "" && rule.Category == category {
-			rule.MatchCount++
-			return rule.Action
-		}
-
-		// Pattern matching not implemented yet
-		// TODO: Add JavaScript expression evaluation for patterns
 	}
 
 	// Default: manual approval
 	return models.RuleAction{Type: "manual"}
+}
+
+// matchesPattern checks if the pattern (regex) matches against tool input
+func matchesPattern(pattern string, toolName string, toolInput map[string]interface{}) bool {
+	// Basic ReDoS protection: limit pattern length
+	if len(pattern) > 500 {
+		return false
+	}
+
+	// Compile regex
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		// Invalid regex, don't match
+		return false
+	}
+
+	var testString string
+
+	// Determine what to match against based on tool
+	switch toolName {
+	case "Bash":
+		if cmd, ok := toolInput["command"].(string); ok {
+			testString = cmd
+		}
+	case "Read", "Edit", "Write":
+		if filePath, ok := toolInput["file_path"].(string); ok {
+			testString = filePath
+		}
+	default:
+		// For other tools, don't match
+		return false
+	}
+
+	// Limit test string length to prevent ReDoS
+	if len(testString) > 10000 {
+		testString = testString[:10000]
+	}
+
+	// Match with timeout protection via channel
+	done := make(chan bool, 1)
+	go func() {
+		done <- re.MatchString(testString)
+	}()
+
+	select {
+	case result := <-done:
+		return result
+	case <-time.After(100 * time.Millisecond):
+		// Timeout - assume no match to prevent ReDoS
+		return false
+	}
 }
 
 // getToolCategory returns the category for a tool

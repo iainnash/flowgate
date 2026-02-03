@@ -18,10 +18,11 @@ struct ClaudePromptApp: App {
 }
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem!
     var popover: NSPopover!
     var floatingWindow: NSWindow?
+    var logWindow: NSWindow?
 
     let promptManager: PromptManager
     let settingsManager: SettingsManager
@@ -43,6 +44,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     nonisolated func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
+            // Start embedded server first
+            ServerManager.shared.startServer()
+
+            // Wait briefly for server to start
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+
             await setupApp()
         }
     }
@@ -54,8 +61,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupApp() async {
-        // Hide from Dock (menu bar app only)
+        // Start as accessory (no dock icon)
         NSApp.setActivationPolicy(.accessory)
+
+        // Set up application menu
+        setupApplicationMenu()
 
         // Set up menu bar
         setupMenuBar()
@@ -73,6 +83,184 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         promptManager.connect()
     }
 
+    private func setupApplicationMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu
+        let appMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        appMenuItem.submenu = appMenu
+
+        appMenu.addItem(NSMenuItem(title: "About Claude Prompt", action: #selector(showAbout), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "Quit Claude Prompt", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+
+        mainMenu.addItem(appMenuItem)
+
+        // Edit menu
+        let editMenu = NSMenu(title: "Edit")
+        let editMenuItem = NSMenuItem()
+        editMenuItem.submenu = editMenu
+
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+
+        mainMenu.addItem(editMenuItem)
+
+        // View menu
+        let viewMenu = NSMenu(title: "View")
+        let viewMenuItem = NSMenuItem()
+        viewMenuItem.submenu = viewMenu
+
+        viewMenu.addItem(NSMenuItem(title: "Show Prompts Window", action: #selector(showPromptsWindow), keyEquivalent: "1"))
+        viewMenu.addItem(NSMenuItem(title: "Show Server Log", action: #selector(showLogWindowAction), keyEquivalent: "2"))
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(NSMenuItem(title: "Open Web UI", action: #selector(openWebUIAction), keyEquivalent: "o"))
+
+        mainMenu.addItem(viewMenuItem)
+
+        // Server menu
+        let serverMenu = NSMenu(title: "Server")
+        let serverMenuItem = NSMenuItem()
+        serverMenuItem.submenu = serverMenu
+
+        serverMenu.addItem(NSMenuItem(title: "Start Server", action: #selector(startServerAction), keyEquivalent: ""))
+        serverMenu.addItem(NSMenuItem(title: "Stop Server", action: #selector(stopServerAction), keyEquivalent: ""))
+        serverMenu.addItem(NSMenuItem(title: "Restart Server", action: #selector(restartServerAction), keyEquivalent: "r"))
+        serverMenu.addItem(NSMenuItem.separator())
+        serverMenu.addItem(NSMenuItem(title: "Clear Log", action: #selector(clearLogAction), keyEquivalent: "k"))
+
+        mainMenu.addItem(serverMenuItem)
+
+        // Window menu
+        let windowMenu = NSMenu(title: "Window")
+        let windowMenuItem = NSMenuItem()
+        windowMenuItem.submenu = windowMenu
+
+        windowMenu.addItem(NSMenuItem(title: "Minimize", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m"))
+        windowMenu.addItem(NSMenuItem(title: "Close", action: #selector(NSWindow.close), keyEquivalent: "w"))
+
+        mainMenu.addItem(windowMenuItem)
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func showAbout() {
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    @objc private func showSettings() {
+        let settingsView = SettingsView(settingsManager: settingsManager)
+        let hostingController = NSHostingController(rootView: settingsView)
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Settings"
+        window.styleMask = [.titled, .closable]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showPromptsWindow() {
+        showFloatingWindow()
+    }
+
+    @objc private func showLogWindowAction() {
+        showLogWindow()
+    }
+
+    @objc private func openWebUIAction() {
+        Task {
+            guard let token = TokenManager.shared.readToken() else {
+                print("Cannot read auth token")
+                return
+            }
+            let urlString = "http://localhost:8888?token=\(token)"
+            if let url = URL(string: urlString) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    @objc private func startServerAction() {
+        ServerManager.shared.startServer()
+    }
+
+    @objc private func stopServerAction() {
+        ServerManager.shared.stopServer()
+    }
+
+    @objc private func restartServerAction() {
+        ServerManager.shared.restartServer()
+    }
+
+    @objc private func clearLogAction() {
+        ServerManager.shared.clearLog()
+    }
+
+    private func showOtherDialog() {
+        // First show and focus the window
+        showFloatingWindow()
+
+        // Check if there's a current prompt
+        guard let prompt = promptManager.currentPrompt else {
+            let alert = NSAlert()
+            alert.messageText = "No Pending Prompts"
+            alert.informativeText = "There are no prompts waiting for a response."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        // Show input dialog
+        let alert = NSAlert()
+        alert.messageText = "Custom Response"
+        alert.informativeText = "Enter a message to send back to Claude for: \(prompt.toolName)"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Send")
+        alert.addButton(withTitle: "Cancel")
+
+        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
+        inputField.placeholderString = "Enter your response..."
+        inputField.usesSingleLineMode = false
+        inputField.cell?.wraps = true
+        inputField.cell?.isScrollable = true
+        alert.accessoryView = inputField
+
+        // Make input field first responder
+        alert.window.initialFirstResponder = inputField
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let reason = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !reason.isEmpty {
+                promptManager.resolvePrompt(prompt, decision: .ask, reason: reason)
+            }
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        Task { @MainActor in
+            // Check if all windows are closed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                let hasVisibleWindows = (self.floatingWindow?.isVisible ?? false) ||
+                                        (self.logWindow?.isVisible ?? false)
+
+                if !hasVisibleWindows {
+                    // Hide from dock when no windows are open
+                    NSApp.setActivationPolicy(.accessory)
+                }
+            }
+        }
+    }
+
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -87,7 +275,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create popover
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 220, height: 280)
+        popover.contentSize = NSSize(width: 220, height: 320)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
             rootView: MenuBarView(
@@ -97,11 +285,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.showFloatingWindow()
                     self?.popover.close()
                 },
+                onShowLog: { [weak self] in
+                    self?.showLogWindow()
+                    self?.popover.close()
+                },
                 onQuit: {
                     NSApp.terminate(nil)
                 }
             )
         )
+    }
+
+    private func showLogWindow() {
+        // Show in dock when window is open (enables menu bar)
+        NSApp.setActivationPolicy(.regular)
+
+        if logWindow == nil {
+            let logView = LogView()
+            let hostingController = NSHostingController(rootView: logView)
+
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "Server Log"
+            window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+            window.setContentSize(NSSize(width: 700, height: 400))
+            window.center()
+            window.setFrameAutosaveName("ClaudePromptLogWindow")
+            window.delegate = self
+
+            logWindow = window
+        }
+
+        logWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func observePrompts() {
@@ -136,6 +351,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Remember position
         window.setFrameAutosaveName("ClaudePromptFloatingWindow")
+        window.delegate = self
 
         // Set initial size if no saved frame
         if window.frame.size == .zero {
@@ -230,7 +446,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         hotkeyManager.onOther = { [weak self] in
             Task { @MainActor in
-                self?.showFloatingWindow()
+                self?.showOtherDialog()
             }
         }
 
@@ -261,6 +477,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showFloatingWindow() {
         guard let window = floatingWindow else { return }
+
+        // Show in dock when window is open (enables menu bar)
+        NSApp.setActivationPolicy(.regular)
 
         let animationsEnabled = settingsManager.settings.server.native.enableAnimations
 

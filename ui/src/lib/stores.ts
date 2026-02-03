@@ -129,12 +129,38 @@ let ws: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const connected = writable(false);
+export const connectionError = writable<string | null>(null);
 
 export function connectWebSocket(): void {
   if (ws) return;
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+  // Read token from URL parameter (passed by desktop app when opening browser)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlToken = urlParams.get('token') || '';
+
+  // If URL has a token, always use it and update localStorage (replaces old token)
+  // If no URL token, fall back to localStorage
+  let savedToken = '';
+  if (urlToken) {
+    // New token from URL - save it (overwrites any old token)
+    localStorage.setItem('claude-prompt-ui-token', urlToken);
+    savedToken = urlToken;
+
+    // Clean up URL by removing token parameter (optional, keeps URL clean)
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('token');
+    window.history.replaceState({}, '', cleanUrl.toString());
+  } else {
+    savedToken = localStorage.getItem('claude-prompt-ui-token') || '';
+  }
+
+  const wsUrl = savedToken
+    ? `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(savedToken)}`
+    : `${protocol}//${window.location.host}/ws`;
+
+  ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
     connected.set(true);

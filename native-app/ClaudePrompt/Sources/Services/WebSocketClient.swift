@@ -1,5 +1,6 @@
 import Foundation
 import Starscream
+import AppKit
 
 enum WSMessage {
     case promptNew(Prompt)
@@ -20,7 +21,8 @@ class WebSocketClient: NSObject, ObservableObject {
     private var socket: WebSocket?
     private var isConnected = false
     private var reconnectTimer: Timer?
-    private let serverURL = URL(string: "ws://127.0.0.1:8888/ws")!
+    private var reconnectAttempts = 0
+    private let maxReconnectAttempts = 3
 
     @Published var connectionStatus: ConnectionStatus = .disconnected
 
@@ -51,7 +53,23 @@ class WebSocketClient: NSObject, ObservableObject {
 
         connectionStatus = .connecting
 
-        var request = URLRequest(url: serverURL)
+        // Read token from filesystem
+        guard let token = TokenManager.shared.readToken() else {
+            connectionStatus = .error("Cannot read authentication token")
+            showAuthErrorAlert()
+            return
+        }
+
+        // Build URL with token query parameter
+        var urlComponents = URLComponents(string: "ws://127.0.0.1:8888/ws")!
+        urlComponents.queryItems = [URLQueryItem(name: "token", value: token)]
+
+        guard let url = urlComponents.url else {
+            connectionStatus = .error("Invalid URL")
+            return
+        }
+
+        var request = URLRequest(url: url)
         request.timeoutInterval = 5
 
         socket = WebSocket(request: request)
@@ -69,10 +87,42 @@ class WebSocketClient: NSObject, ObservableObject {
     }
 
     private func scheduleReconnect() {
+        guard reconnectAttempts < maxReconnectAttempts else {
+            connectionStatus = .error("Max reconnection attempts reached")
+            return
+        }
+
+        reconnectAttempts += 1
         reconnectTimer?.invalidate()
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
             self?.socket = nil
             self?.connect()
+        }
+    }
+
+    private func showAuthErrorAlert() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Authentication Failed"
+            alert.informativeText = """
+                Could not connect to the server. The authentication token may be invalid or missing.
+
+                Please restart the Claude Prompt app to regenerate the server and token.
+
+                If the problem persists:
+                1. Quit the app completely
+                2. Delete ~/.claude-prompt-ui/token
+                3. Restart the app
+                """
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "Restart App")
+            alert.addButton(withTitle: "Cancel")
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // Restart the app
+                NSApplication.shared.relaunch()
+            }
         }
     }
 
@@ -188,12 +238,21 @@ extension WebSocketClient: Starscream.WebSocketDelegate {
         switch event {
         case .connected:
             isConnected = true
+            reconnectAttempts = 0
             connectionStatus = .connected
             delegate?.webSocketDidReceive(.connected)
 
-        case .disconnected(_, _):
+        case .disconnected(let reason, let code):
             isConnected = false
             connectionStatus = .disconnected
+
+            // Check for authentication error (401)
+            if code == 401 {
+                connectionStatus = .error("Authentication failed")
+                showAuthErrorAlert()
+                return
+            }
+
             delegate?.webSocketDidReceive(.disconnected(nil))
             scheduleReconnect()
 
@@ -205,6 +264,15 @@ extension WebSocketClient: Starscream.WebSocketDelegate {
 
         case .error(let error):
             isConnected = false
+
+            // Check for HTTP error in the error description
+            if let errorDescription = error?.localizedDescription,
+               errorDescription.contains("401") {
+                connectionStatus = .error("Authentication failed")
+                showAuthErrorAlert()
+                return
+            }
+
             connectionStatus = .error(error?.localizedDescription ?? "Unknown error")
             delegate?.webSocketDidReceive(.disconnected(error))
             scheduleReconnect()
@@ -217,5 +285,15 @@ extension WebSocketClient: Starscream.WebSocketDelegate {
         default:
             break
         }
+    }
+}
+
+extension NSApplication {
+    func relaunch() {
+        let task = Process()
+        task.launchPath = "/usr/bin/open"
+        task.arguments = [Bundle.main.bundlePath]
+        task.launch()
+        NSApp.terminate(nil)
     }
 }

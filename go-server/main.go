@@ -1,35 +1,105 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/iain/claude-prompt-ui/handlers"
+	"github.com/iain/claude-prompt-ui/middleware"
 	"github.com/iain/claude-prompt-ui/models"
 	"github.com/iain/claude-prompt-ui/queue"
 	"github.com/rs/cors"
 )
 
 var (
-	host    = "127.0.0.1"
-	port    = getEnv("PORT", "8888")
-	verbose = getEnv("VERBOSE", "") == "true" || getEnv("VERBOSE", "") == "1"
+	host      = "127.0.0.1"
+	port      = getEnv("PORT", "8888")
+	verbose   = getEnv("VERBOSE", "") == "true" || getEnv("VERBOSE", "") == "1"
+	authToken = "" // Will be loaded/generated
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for now
+		origin := r.Header.Get("Origin")
+		// Allow no origin (direct WebSocket clients)
+		if origin == "" {
+			return true
+		}
+		// Allow file:// origins (native app WebView)
+		if strings.HasPrefix(origin, "file://") {
+			return true
+		}
+		// Parse origin URL and check hostname
+		u, err := url.Parse(origin)
+		if err != nil {
+			log.Printf("[WARN] WebSocket origin parse error: %s", origin)
+			return false
+		}
+		hostname := u.Hostname()
+		allowed := hostname == "localhost" || hostname == "127.0.0.1"
+		if !allowed {
+			log.Printf("[WARN] WebSocket origin rejected: %s (hostname: %s)", origin, hostname)
+		}
+		return allowed
 	},
 }
 
+func getTokenPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal("Cannot determine home directory")
+	}
+	return filepath.Join(homeDir, ".claude-prompt-ui", "token")
+}
+
+func ensureTokenExists() string {
+	tokenPath := getTokenPath()
+
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(tokenPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Fatal("Cannot create token directory:", err)
+	}
+
+	// Check if token file exists
+	if data, err := os.ReadFile(tokenPath); err == nil {
+		token := strings.TrimSpace(string(data))
+		if token != "" {
+			return token
+		}
+	}
+
+	// Generate new token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		log.Fatal("Cannot generate token:", err)
+	}
+	token := base64.URLEncoding.EncodeToString(tokenBytes)
+
+	// Save token with restricted permissions (0600 - owner read/write only)
+	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
+		log.Fatal("Cannot save token:", err)
+	}
+
+	logInfo("Generated new authentication token at: %s", tokenPath)
+	return token
+}
+
 func main() {
+	// Load or generate authentication token
+	authToken = ensureTokenExists()
+	logInfo("Authentication enabled")
 	// Create queue
 	q := queue.New(verbose)
 
@@ -62,10 +132,13 @@ func main() {
 	// Create router
 	r := mux.NewRouter()
 
-	// API routes
-	r.HandleFunc("/api/prompt", makePromptHandler(q)).Methods("POST")
+	// Protected routes
+	authMw := middleware.AuthMiddleware(authToken)
+	r.Handle("/api/prompt", authMw(http.HandlerFunc(makePromptHandler(q)))).Methods("POST")
+	r.Handle("/ws", authMw(http.HandlerFunc(makeWebSocketHandler(hub)))).Methods("GET")
+
+	// Public routes (no auth needed)
 	r.HandleFunc("/api/health", healthHandler).Methods("GET")
-	r.HandleFunc("/ws", makeWebSocketHandler(hub)).Methods("GET")
 
 	// Serve static files if public directory exists
 	publicDir := findPublicDir()

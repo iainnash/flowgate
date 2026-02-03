@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -42,6 +44,28 @@ var (
 	serverURL = getEnv("CLAUDE_PROMPT_UI_SERVER", "http://127.0.0.1:8888")
 	timeoutMS = getEnvInt("CLAUDE_PROMPT_UI_TIMEOUT", 120000)
 )
+
+// readTokenFromFile reads auth token from the app directory
+func readTokenFromFile() string {
+	// Try environment variable first
+	if token := os.Getenv("CLAUDE_PROMPT_UI_TOKEN"); token != "" {
+		return token
+	}
+
+	// Read from ~/.claude-prompt-ui/token
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	tokenPath := filepath.Join(homeDir, ".claude-prompt-ui", "token")
+	tokenBytes, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(tokenBytes))
+}
 
 func main() {
 	// Read stdin
@@ -94,15 +118,24 @@ func sendToServer(input *HookInput) (*ServerResponse, error) {
 	}
 
 	// Create request
+	req, err := http.NewRequest("POST", serverURL+"/api/prompt", bytes.NewBuffer(inputJSON))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Add auth token from file or environment
+	if authToken := readTokenFromFile(); authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+
+	// Send request
 	client := &http.Client{
 		Timeout: time.Duration(timeoutMS) * time.Millisecond,
 	}
 
-	resp, err := client.Post(
-		serverURL+"/api/prompt",
-		"application/json",
-		bytes.NewBuffer(inputJSON),
-	)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -242,14 +242,14 @@
               </div>
 
               <div class="form-group">
-                <label for="rule-pattern">Pattern (advanced)</label>
+                <label for="rule-pattern">Pattern (regex, advanced)</label>
                 <input
                   id="rule-pattern"
                   type="text"
                   bind:value={editPattern}
-                  placeholder="e.g., cwd.startsWith('/home/project')"
+                  placeholder="e.g., ^npm (install|test)"
                 />
-                <span class="field-hint">JavaScript expression evaluated against prompt</span>
+                <span class="field-hint">Regular expression matched against tool input (Bash commands, file paths, etc.)</span>
               </div>
             </div>
 

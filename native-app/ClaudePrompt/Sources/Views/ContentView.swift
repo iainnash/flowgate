@@ -74,6 +74,12 @@ struct ContentView: View {
         guard !promptManager.prompts.isEmpty else { return event }
         guard !showingOtherDialog && !showingSettings else { return event }
 
+        // Don't intercept keys when typing in a text field
+        if let firstResponder = NSApp.keyWindow?.firstResponder,
+           firstResponder is NSTextView || firstResponder is NSTextField {
+            return event
+        }
+
         let key = event.charactersIgnoringModifiers ?? ""
 
         switch key {
