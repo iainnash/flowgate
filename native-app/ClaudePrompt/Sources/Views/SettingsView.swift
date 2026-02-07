@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var returnFocusWhenEmpty: Bool
     @State private var showAutoAccept: Bool
     @State private var enableAnimations: Bool
+    @State private var showingRules: Bool = false
 
     init(settingsManager: SettingsManager) {
         self.settingsManager = settingsManager
@@ -52,6 +53,23 @@ struct SettingsView: View {
 
             // Settings content
             Form {
+                Section("Rules") {
+                    Button {
+                        showingRules = true
+                    } label: {
+                        HStack {
+                            Label("Configure Rules", systemImage: "slider.horizontal.3")
+                            Spacer()
+                            Text("\(settingsManager.settings.server.rules.count)")
+                                .foregroundColor(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Section("Hotkeys") {
                     HStack {
                         Text("Accept prompt")
@@ -188,7 +206,11 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
-        .frame(width: 400, height: 500)
+        .frame(width: 450, height: 550)
+        .sheet(isPresented: $showingRules) {
+            RulesListView(settingsManager: settingsManager)
+                .frame(minWidth: 550, minHeight: 450)
+        }
     }
 
     private func saveSettings() {

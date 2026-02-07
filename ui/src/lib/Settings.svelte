@@ -23,7 +23,7 @@
   let editEnabled = true;
 
   // Categories for dropdown
-  const categories: (ToolCategory | '')[] = ['', 'read', 'write', 'execute', 'web', 'interactive', 'mcp', 'other'];
+  const categories: (ToolCategory | '')[] = ['', 'read', 'write', 'execute', 'task', 'web', 'interactive', 'mcp', 'other'];
 
   // Known tools from TOOL_CATEGORIES
   const knownTools = [
@@ -31,6 +31,7 @@
     ...Array.from(TOOL_CATEGORIES.read),
     ...Array.from(TOOL_CATEGORIES.write),
     ...Array.from(TOOL_CATEGORIES.execute),
+    ...Array.from(TOOL_CATEGORIES.task),
     ...Array.from(TOOL_CATEGORIES.web),
     ...Array.from(TOOL_CATEGORIES.interactive),
   ].sort();
@@ -169,6 +170,7 @@
       case 'read': return '#22c55e';
       case 'write': return '#ef4444';
       case 'execute': return '#f59e0b';
+      case 'task': return '#a855f7';
       case 'web': return '#3b82f6';
       case 'interactive': return '#8b5cf6';
       case 'mcp': return '#06b6d4';

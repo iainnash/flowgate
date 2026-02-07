@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum Decision: String, Codable {
     case allow
@@ -6,20 +7,24 @@ enum Decision: String, Codable {
     case ask
 }
 
-enum ToolCategory: String, Codable, CaseIterable {
+enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     case read
     case write
     case execute
+    case task
     case web
     case interactive
     case mcp
     case other
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .read: return "Read"
         case .write: return "Write"
         case .execute: return "Execute"
+        case .task: return "Task"
         case .web: return "Web"
         case .interactive: return "Interactive"
         case .mcp: return "MCP"
@@ -27,19 +32,53 @@ enum ToolCategory: String, Codable, CaseIterable {
         }
     }
 
+    var color: Color {
+        switch self {
+        case .read: return Color(red: 0.133, green: 0.773, blue: 0.369) // #22c55e
+        case .write: return Color(red: 0.937, green: 0.267, blue: 0.267) // #ef4444
+        case .execute: return Color(red: 0.961, green: 0.620, blue: 0.043) // #f59e0b
+        case .task: return Color(red: 0.659, green: 0.333, blue: 0.969) // #a855f7
+        case .web: return Color(red: 0.231, green: 0.510, blue: 0.965) // #3b82f6
+        case .interactive: return Color(red: 0.545, green: 0.361, blue: 0.965) // #8b5cf6
+        case .mcp: return Color(red: 0.024, green: 0.714, blue: 0.831) // #06b6d4
+        case .other: return Color(red: 0.420, green: 0.451, blue: 0.498) // #6b7280
+        }
+    }
+
+    static let knownTools: [String] = [
+        // Read tools
+        "Read", "Glob", "Grep",
+        "ListMcpResourcesTool", "ReadMcpResourceTool", "ToolSearch",
+        // Write tools
+        "Edit", "Write", "MultiEdit", "NotebookEdit",
+        // Execute tools
+        "Bash", "KillShell", "Skill",
+        // Task tools
+        "Task", "TaskList", "TaskGet", "TaskOutput",
+        "TaskCreate", "TaskUpdate", "TaskStop",
+        // Web tools
+        "WebFetch", "WebSearch",
+        // Interactive tools
+        "AskUserQuestion", "ExitPlanMode", "EnterPlanMode",
+    ].sorted()
+
     static func fromToolName(_ toolName: String) -> ToolCategory {
-        let readTools = ["Read", "Glob", "Grep", "TaskList", "TaskGet", "TaskOutput", "LS", "ListMcpResourcesTool", "ReadMcpResourceTool", "ToolSearch"]
-        let writeTools = ["Edit", "Write", "MultiEdit", "NotebookEdit", "TaskCreate", "TaskUpdate"]
-        let executeTools = ["Bash", "KillShell", "Task", "Skill"]
-        let webTools = ["WebFetch", "WebSearch"]
-        let interactiveTools = ["AskUserQuestion", "ExitPlanMode", "EnterPlanMode"]
+        if toolName.hasPrefix("mcp__") { return .mcp }
+
+        let readTools: Set<String> = ["Read", "Glob", "Grep", "ListMcpResourcesTool", "ReadMcpResourceTool", "ToolSearch"]
+        let writeTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+        let executeTools: Set<String> = ["Bash", "KillShell", "Skill"]
+        let taskTools: Set<String> = ["Task", "TaskList", "TaskGet", "TaskOutput", "TaskCreate", "TaskUpdate", "TaskStop"]
+        let webTools: Set<String> = ["WebFetch", "WebSearch"]
+        let interactiveTools: Set<String> = ["AskUserQuestion", "ExitPlanMode", "EnterPlanMode"]
 
         if readTools.contains(toolName) { return .read }
         if writeTools.contains(toolName) { return .write }
         if executeTools.contains(toolName) { return .execute }
+        if taskTools.contains(toolName) { return .task }
         if webTools.contains(toolName) { return .web }
         if interactiveTools.contains(toolName) { return .interactive }
-        if toolName.hasPrefix("mcp__") { return .mcp }
+
         return .other
     }
 }

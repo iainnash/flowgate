@@ -142,8 +142,14 @@ func (h *Hub) HandleClientMessage(client *Client, messageType int, data []byte) 
 	case "resolve":
 		h.handleResolve(msg)
 
+	case "resolve-all":
+		h.handleResolveAll(msg)
+
 	case "pause":
 		h.handlePauseTimer(msg)
+
+	case "toggle-pause":
+		h.handleTogglePause()
 
 	case "togglePause":
 		h.handleTogglePause()
@@ -177,6 +183,31 @@ func (h *Hub) handleResolve(msg map[string]interface{}) {
 	}
 
 	h.queue.Resolve(id, decision, false)
+}
+
+// handleResolveAll resolves all prompts with the same decision
+func (h *Hub) handleResolveAll(msg map[string]interface{}) {
+	decisionStr, ok := msg["resolveDecision"].(string)
+	if !ok {
+		h.log("resolve-all missing resolveDecision field")
+		return
+	}
+
+	decision := &models.Decision{
+		Decision: decisionStr,
+	}
+
+	if !decision.IsValid() {
+		h.log("resolve-all invalid decision: %s", decisionStr)
+		return
+	}
+
+	// Resolve all pending prompts
+	prompts := h.queue.List()
+	h.log("Resolving all %d prompts with decision: %s", len(prompts), decisionStr)
+	for _, prompt := range prompts {
+		h.queue.Resolve(prompt.ID, decision, false)
+	}
 }
 
 // handlePauseTimer pauses a specific prompt's timer

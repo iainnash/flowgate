@@ -176,7 +176,7 @@
   </div>
 </main>
 
-<Settings open={showSettings} on:close={() => (showSettings = false)} />
+<Settings bind:open={showSettings} on:close={() => (showSettings = false)} />
 
 <style>
   main {

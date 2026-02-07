@@ -7,17 +7,18 @@ import { DEFAULT_UI_PREFS } from './types';
 export const TOOL_CATEGORIES = {
   read: new Set([
     'Read', 'Glob', 'Grep',
-    'TaskList', 'TaskGet', 'TaskOutput',
     'ListMcpResourcesTool', 'ReadMcpResourceTool',
     'ToolSearch',
   ]),
   write: new Set([
     'Edit', 'Write', 'NotebookEdit',
-    'TaskCreate', 'TaskUpdate',
   ]),
   execute: new Set([
-    'Bash', 'KillShell',
-    'Task', 'Skill',
+    'Bash', 'KillShell', 'Skill',
+  ]),
+  task: new Set([
+    'Task', 'TaskList', 'TaskGet', 'TaskOutput',
+    'TaskCreate', 'TaskUpdate', 'TaskStop',
   ]),
   web: new Set([
     'WebFetch', 'WebSearch',
@@ -36,6 +37,7 @@ export function getToolCategory(toolName: string): ToolCategory {
   if (TOOL_CATEGORIES.read.has(toolName)) return 'read';
   if (TOOL_CATEGORIES.write.has(toolName)) return 'write';
   if (TOOL_CATEGORIES.execute.has(toolName)) return 'execute';
+  if (TOOL_CATEGORIES.task.has(toolName)) return 'task';
   if (TOOL_CATEGORIES.web.has(toolName)) return 'web';
   if (TOOL_CATEGORIES.interactive.has(toolName)) return 'interactive';
   return 'other';

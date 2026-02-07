@@ -14,6 +14,8 @@
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let showModal = false;
   let expanded = false;
+  let shouldDismiss = false;
+  let dismissTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   $: sessionColor = getSessionColor(prompt.sessionId);
   // Use server-provided acceptType
@@ -67,10 +69,18 @@
     };
     updateCountdown();
     intervalId = setInterval(updateCountdown, 100);
+
+    // Auto-dismiss after 3 seconds for immediate auto-accept prompts
+    if (isImmediateAutoAccept) {
+      dismissTimeoutId = setTimeout(() => {
+        shouldDismiss = true;
+      }, 3000);
+    }
   });
 
   onDestroy(() => {
     if (intervalId) clearInterval(intervalId);
+    if (dismissTimeoutId) clearTimeout(dismissTimeoutId);
   });
 
   function handleYes() {
@@ -96,7 +106,7 @@
   }
 </script>
 
-<div class="card" class:auto-accepted={isAutoAccepted}>
+<div class="card" class:auto-accepted={isAutoAccepted} class:dismissing={shouldDismiss}>
   <div class="header">
     {#if displayIndex}
       <span class="device-index" class:overflow={displayIndex === '5+'}>
@@ -164,6 +174,12 @@
     border-radius: 10px;
     padding: 14px;
     margin-bottom: 12px;
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  }
+
+  .card.dismissing {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
   }
 
   .header {

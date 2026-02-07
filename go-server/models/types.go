@@ -2,6 +2,8 @@ package models
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -181,4 +183,55 @@ func MarshalWSMessage(msgType string, payload interface{}) ([]byte, error) {
 // GetCurrentTimeMillis returns current time in milliseconds
 func GetCurrentTimeMillis() int64 {
 	return time.Now().UnixMilli()
+}
+
+// GetSettingsPath returns the path to the settings file
+func GetSettingsPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".claude-prompt-ui", "settings.json")
+}
+
+// LoadSettings loads settings from disk, returns default if not found
+func LoadSettings() *Settings {
+	path := GetSettingsPath()
+	if path == "" {
+		return DefaultSettings()
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// File doesn't exist or can't be read, return defaults
+		return DefaultSettings()
+	}
+
+	var settings Settings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return DefaultSettings()
+	}
+
+	return &settings
+}
+
+// SaveSettings saves settings to disk
+func SaveSettings(settings *Settings) error {
+	path := GetSettingsPath()
+	if path == "" {
+		return nil
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
 }

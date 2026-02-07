@@ -275,7 +275,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Create popover
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 220, height: 320)
+        popover.contentSize = NSSize(width: 240, height: 380)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
             rootView: MenuBarView(
@@ -287,6 +287,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 },
                 onShowLog: { [weak self] in
                     self?.showLogWindow()
+                    self?.popover.close()
+                },
+                onShowSettings: { [weak self] in
+                    self?.showSettings()
                     self?.popover.close()
                 },
                 onQuit: {
@@ -484,16 +488,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let animationsEnabled = settingsManager.settings.server.native.enableAnimations
 
         if animationsEnabled {
-            // Start transparent
+            // Start transparent BEFORE showing
             window.alphaValue = 0
+            window.orderFront(nil)
 
-            window.makeKeyAndOrderFront(nil)
+            // Activate app (this sometimes causes a flash if done after makeKey)
             NSApp.activate(ignoringOtherApps: true)
 
-            // Fade in
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.15
-                window.animator().alphaValue = 1
+            // Make key after activating to prevent flash
+            window.makeKey()
+
+            // Fade in with a slight delay to prevent flash
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.15
+                    window.animator().alphaValue = 1
+                }
             }
         } else {
             // No animation

@@ -51,7 +51,7 @@ export function isExitPlanMode(prompt: Prompt): prompt is Prompt & { toolInput: 
   return prompt.toolName === 'ExitPlanMode';
 }
 
-export type ToolCategory = 'read' | 'write' | 'execute' | 'web' | 'interactive' | 'mcp' | 'other';
+export type ToolCategory = 'read' | 'write' | 'execute' | 'task' | 'web' | 'interactive' | 'mcp' | 'other';
 
 // Simplified settings matching Go server schema
 export interface Settings {

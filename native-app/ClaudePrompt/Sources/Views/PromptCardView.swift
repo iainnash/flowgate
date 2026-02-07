@@ -15,6 +15,9 @@ struct PromptCardView: View {
     @State private var otherReason: String = ""
     @FocusState private var isOtherFieldFocused: Bool
 
+    // Expandable description state
+    @State private var isDescriptionExpanded: Bool = false
+
     // Animation state for entrance
     @State private var appeared: Bool = false
 
@@ -53,12 +56,8 @@ struct PromptCardView: View {
                 // MCP tool arguments view
                 McpArgsView(prompt: prompt)
             } else {
-                // Description for other tools
-                Text(prompt.description)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .lineLimit(3)
-                    .truncationMode(.tail)
+                // Expandable description for other tools (especially Bash)
+                expandableDescriptionView
             }
 
             // Working directory
@@ -103,14 +102,18 @@ struct PromptCardView: View {
                 .stroke(isActive ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        // Entrance animation
-        .opacity(enableAnimations ? (appeared && !shouldDismiss ? 1 : 0) : (shouldDismiss ? 0 : 1))
-        .offset(y: enableAnimations ? (appeared && !shouldDismiss ? 0 : -20) : (shouldDismiss ? -20 : 0))
-        .scaleEffect(enableAnimations ? (appeared && !shouldDismiss ? 1 : 0.95) : (shouldDismiss ? 0.95 : 1))
+        // Entrance animation - set initial state immediately
+        .opacity(appeared && !shouldDismiss ? 1 : 0)
+        .offset(y: appeared && !shouldDismiss ? 0 : -20)
+        .scaleEffect(appeared && !shouldDismiss ? 1 : 0.95)
         .onAppear {
+            // Delay animation start slightly to prevent flash on first frame
             if enableAnimations {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0)) {
-                    appeared = true
+                // Use async to ensure view is fully laid out before animating
+                DispatchQueue.main.async {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0)) {
+                        appeared = true
+                    }
                 }
             } else {
                 appeared = true
@@ -168,6 +171,86 @@ struct PromptCardView: View {
             }
         }
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    // Get the full command text for display
+    private var fullCommandText: String {
+        if let command = prompt.toolInput["command"]?.value as? String {
+            return command
+        }
+        return prompt.description
+    }
+
+    // Check if description is long enough to need expansion
+    private var needsExpansion: Bool {
+        fullCommandText.count > 100 || fullCommandText.contains("\n")
+    }
+
+    private var expandableDescriptionView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isDescriptionExpanded {
+                // Expanded view with scroll
+                ScrollView {
+                    Text(fullCommandText)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+                .padding(8)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(6)
+
+                // Collapse button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isDescriptionExpanded = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.up")
+                        Text("Collapse")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+            } else {
+                // Collapsed view
+                HStack(alignment: .top) {
+                    Text(prompt.description)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 4)
+
+                    if needsExpansion {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isDescriptionExpanded = true
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down.circle")
+                                .font(.body)
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Expand to see full command")
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if needsExpansion {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isDescriptionExpanded = true
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var headerView: some View {
@@ -231,6 +314,7 @@ struct PromptCardView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
             }
+            .frame(maxWidth: .infinity)
 
             // Deny button
             Button(action: onDeny) {
@@ -250,6 +334,7 @@ struct PromptCardView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
+            .frame(maxWidth: .infinity)
 
             // Other button - toggles inline text field
             Button {
@@ -277,6 +362,7 @@ struct PromptCardView: View {
                 .padding(.vertical, isActive ? 6 : 8)
             }
             .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -285,7 +371,8 @@ struct PromptCardView: View {
         case .read: return .blue
         case .write: return .orange
         case .execute: return .red
-        case .web: return .purple
+        case .task: return .purple
+        case .web: return .indigo
         case .interactive: return .green
         case .mcp: return .cyan
         case .other: return .gray

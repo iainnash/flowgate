@@ -12,12 +12,15 @@ struct ContentView: View {
     @Environment(\.controlActiveState) private var controlActiveState
 
     // Filter prompts based on showAutoAccept setting
+    // Always show manual and accept-after (countdown) prompts
+    // Only hide immediate auto-accept prompts when showAutoAccept is false
     var filteredPrompts: [Prompt] {
         let sorted = promptManager.sortedPrompts
         if settingsManager.settings.server.native.showAutoAccept {
             return sorted
         } else {
-            return sorted.filter { $0.acceptType == .manual }
+            // Show manual AND accept-after prompts (countdown prompts still need attention)
+            return sorted.filter { $0.acceptType != .autoAccept }
         }
     }
 
@@ -45,7 +48,7 @@ struct ContentView: View {
         .onAppear {
             setupKeyboardHandling()
         }
-        .onChange(of: promptManager.prompts.count) { newCount in
+        .onChange(of: filteredPrompts.count) { newCount in
             // Reset selection if out of bounds
             if selectedIndex >= newCount {
                 selectedIndex = max(0, newCount - 1)
@@ -71,7 +74,7 @@ struct ContentView: View {
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
-        guard !promptManager.prompts.isEmpty else { return event }
+        guard !filteredPrompts.isEmpty else { return event }
         guard !showingOtherDialog && !showingSettings else { return event }
 
         // Don't intercept keys when typing in a text field
@@ -114,7 +117,7 @@ struct ContentView: View {
     }
 
     private func selectNext() {
-        if selectedIndex < promptManager.prompts.count - 1 {
+        if selectedIndex < filteredPrompts.count - 1 {
             selectedIndex += 1
         }
     }
@@ -126,20 +129,20 @@ struct ContentView: View {
     }
 
     private func acceptSelected() {
-        guard selectedIndex < promptManager.prompts.count else { return }
-        let prompt = promptManager.prompts[selectedIndex]
+        guard selectedIndex < filteredPrompts.count else { return }
+        let prompt = filteredPrompts[selectedIndex]
         promptManager.resolvePrompt(prompt, decision: .allow)
     }
 
     private func denySelected() {
-        guard selectedIndex < promptManager.prompts.count else { return }
-        let prompt = promptManager.prompts[selectedIndex]
+        guard selectedIndex < filteredPrompts.count else { return }
+        let prompt = filteredPrompts[selectedIndex]
         promptManager.resolvePrompt(prompt, decision: .deny)
     }
 
     var selectedPrompt: Prompt? {
-        guard selectedIndex < promptManager.prompts.count else { return nil }
-        return promptManager.prompts[selectedIndex]
+        guard selectedIndex < filteredPrompts.count else { return nil }
+        return filteredPrompts[selectedIndex]
     }
 
     private var headerView: some View {
@@ -259,29 +262,53 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private func promptCard(for prompt: Prompt, at index: Int) -> some View {
-        PromptCardView(
-            prompt: prompt,
-            sessionColor: promptManager.colorForSession(prompt.sessionId),
-            isActive: index == selectedIndex,
-            windowFocused: controlActiveState == .key,
-            enableAnimations: settingsManager.settings.server.native.enableAnimations,
-            onAccept: {
-                promptManager.resolvePrompt(prompt, decision: .allow)
-            },
-            onDeny: {
-                promptManager.resolvePrompt(prompt, decision: .deny)
-            },
-            onAcceptWithReason: { reason in
-                promptManager.resolvePrompt(prompt, decision: .allow, reason: reason)
-            },
-            onDenyWithReason: { reason in
-                promptManager.resolvePrompt(prompt, decision: .deny, reason: reason)
+        if prompt.toolName == "ExitPlanMode" {
+            ExitPlanModeCardView(
+                prompt: prompt,
+                sessionColor: promptManager.colorForSession(prompt.sessionId),
+                isActive: index == selectedIndex,
+                windowFocused: controlActiveState == .key,
+                enableAnimations: settingsManager.settings.server.native.enableAnimations,
+                onAccept: {
+                    promptManager.resolvePrompt(prompt, decision: .allow)
+                },
+                onDeny: {
+                    promptManager.resolvePrompt(prompt, decision: .deny)
+                },
+                onAskInTerminal: {
+                    promptManager.resolvePrompt(prompt, decision: .ask, reason: "User wants to decide in terminal")
+                }
+            )
+            .id(prompt.id)
+            .onTapGesture {
+                selectedIndex = index
             }
-        )
-        .id(prompt.id)
-        .onTapGesture {
-            selectedIndex = index
+        } else {
+            PromptCardView(
+                prompt: prompt,
+                sessionColor: promptManager.colorForSession(prompt.sessionId),
+                isActive: index == selectedIndex,
+                windowFocused: controlActiveState == .key,
+                enableAnimations: settingsManager.settings.server.native.enableAnimations,
+                onAccept: {
+                    promptManager.resolvePrompt(prompt, decision: .allow)
+                },
+                onDeny: {
+                    promptManager.resolvePrompt(prompt, decision: .deny)
+                },
+                onAcceptWithReason: { reason in
+                    promptManager.resolvePrompt(prompt, decision: .allow, reason: reason)
+                },
+                onDenyWithReason: { reason in
+                    promptManager.resolvePrompt(prompt, decision: .deny, reason: reason)
+                }
+            )
+            .id(prompt.id)
+            .onTapGesture {
+                selectedIndex = index
+            }
         }
     }
 

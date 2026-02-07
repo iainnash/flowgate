@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var settingsManager: SettingsManager
     let onShowWindow: () -> Void
     let onShowLog: () -> Void
+    let onShowSettings: () -> Void
     let onQuit: () -> Void
 
     private func openWebUI() {
@@ -37,89 +38,145 @@ struct MenuBarView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Status
+        VStack(alignment: .leading, spacing: 0) {
+            // Status header
             HStack {
                 Circle()
                     .fill(promptManager.isConnected ? Color.green : Color.red)
                     .frame(width: 8, height: 8)
                 Text(promptManager.connectionStatus)
                     .font(.caption)
+                Spacer()
+                if promptManager.promptCount > 0 {
+                    Text("\(promptManager.promptCount)")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 8)
+            .padding(.vertical, 10)
 
             Divider()
 
             // Prompts section
-            if promptManager.prompts.isEmpty {
-                Text("No pending prompts")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-            } else {
-                Text("\(promptManager.promptCount) pending prompt\(promptManager.promptCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 12)
-
-                // Quick actions
-                Button("Accept All") {
-                    promptManager.acceptAll()
+            if !promptManager.prompts.isEmpty {
+                MenuSection(title: "Prompts") {
+                    MenuButton(title: "Accept All", shortcut: nil) {
+                        promptManager.acceptAll()
+                    }
+                    MenuButton(title: "Deny All", shortcut: nil) {
+                        promptManager.denyAll()
+                    }
                 }
-                .padding(.horizontal, 12)
+                Divider()
+            }
 
-                Button("Deny All") {
-                    promptManager.denyAll()
+            // View section
+            MenuSection(title: "View") {
+                MenuButton(title: "Show Prompts Window", shortcut: "⌘1") {
+                    onShowWindow()
                 }
-                .padding(.horizontal, 12)
+                MenuButton(title: "Show Server Log", shortcut: "⌘2") {
+                    onShowLog()
+                }
+                MenuButton(title: "Open Web UI", shortcut: "⌘O") {
+                    openWebUI()
+                }
             }
 
             Divider()
 
-            // Window toggle
-            Button("Show Window") {
-                onShowWindow()
-            }
-            .keyboardShortcut("p", modifiers: [.command, .shift])
-            .padding(.horizontal, 12)
-
-            // Open Web UI
-            Button("Open Web UI") {
-                openWebUI()
-            }
-            .padding(.horizontal, 12)
-
-            Divider()
-
-            // Server controls
-            Button(ServerManager.shared.serverRunning ? "Restart Server" : "Start Server") {
-                Task {
-                    if ServerManager.shared.serverRunning {
+            // Server section
+            MenuSection(title: "Server") {
+                if ServerManager.shared.serverRunning {
+                    MenuButton(title: "Restart Server", shortcut: "⌘R") {
                         ServerManager.shared.restartServer()
-                    } else {
+                    }
+                    MenuButton(title: "Stop Server", shortcut: nil) {
+                        ServerManager.shared.stopServer()
+                    }
+                } else {
+                    MenuButton(title: "Start Server", shortcut: nil) {
                         ServerManager.shared.startServer()
                     }
                 }
+                MenuButton(title: "Clear Log", shortcut: "⌘K") {
+                    ServerManager.shared.clearLog()
+                }
             }
-            .padding(.horizontal, 12)
-
-            Button("Show Server Log") {
-                onShowLog()
-            }
-            .padding(.horizontal, 12)
 
             Divider()
 
-            // Quit
-            Button("Quit Claude Prompt") {
-                onQuit()
+            // App section
+            MenuSection(title: "App") {
+                MenuButton(title: "Settings...", shortcut: "⌘,") {
+                    onShowSettings()
+                }
+                MenuButton(title: "Quit Claude Prompt", shortcut: "⌘Q") {
+                    onQuit()
+                }
             }
-            .keyboardShortcut("q", modifiers: .command)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
         }
-        .frame(width: 200)
+        .frame(width: 220)
+    }
+}
+
+// MARK: - Helper Views
+
+struct MenuSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+            content
+        }
+    }
+}
+
+struct MenuButton: View {
+    let title: String
+    let shortcut: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                Spacer()
+                if let shortcut = shortcut {
+                    Text(shortcut)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuButtonStyle())
+        .padding(.horizontal, 8)
+    }
+}
+
+struct MenuButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.2) : Color.clear)
+            .cornerRadius(4)
     }
 }
 
@@ -131,6 +188,7 @@ struct MenuBarView_Previews: PreviewProvider {
             settingsManager: SettingsManager(webSocket: ws),
             onShowWindow: {},
             onShowLog: {},
+            onShowSettings: {},
             onQuit: {}
         )
     }

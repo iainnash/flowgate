@@ -5,10 +5,40 @@
  */
 
 import { WebSocket } from 'ws';
+import { readFileSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import { StreamDeckPlugin } from './devices/streamdeck.js';
 import type { WsMessage, ClientMessage, Prompt, Decision } from './types.js';
 
-const SERVER_URL = process.env.SERVER_URL ?? 'ws://127.0.0.1:8888/ws';
+const SERVER_BASE_URL = process.env.SERVER_URL ?? 'ws://127.0.0.1:8888/ws';
+
+// Read authentication token from ~/.claude-prompt-ui/token
+function readToken(): string | null {
+  const tokenPath = join(homedir(), '.claude-prompt-ui', 'token');
+  if (!existsSync(tokenPath)) {
+    console.error('[Client] Token file not found at:', tokenPath);
+    console.error('[Client] Make sure the Go server is running to generate a token');
+    return null;
+  }
+  try {
+    return readFileSync(tokenPath, 'utf-8').trim();
+  } catch (err) {
+    console.error('[Client] Failed to read token:', err);
+    return null;
+  }
+}
+
+function getServerUrl(): string {
+  const token = readToken();
+  if (!token) {
+    console.warn('[Client] No token found, connection will likely fail with 401');
+    return SERVER_BASE_URL;
+  }
+  // Append token as query parameter
+  const separator = SERVER_BASE_URL.includes('?') ? '&' : '?';
+  return `${SERVER_BASE_URL}${separator}token=${token}`;
+}
 
 let ws: WebSocket | null = null;
 let streamDeck: StreamDeckPlugin | null = null;
@@ -51,9 +81,10 @@ async function main(): Promise<void> {
 
 function connect(): void {
   if (ws) return;
-  
-  console.log(`[Client] Connecting to ${SERVER_URL}...`);
-  ws = new WebSocket(SERVER_URL);
+
+  const serverUrl = getServerUrl();
+  console.log(`[Client] Connecting to server...`);
+  ws = new WebSocket(serverUrl);
   
   ws.on('open', () => {
     console.log('[Client] Connected to server');

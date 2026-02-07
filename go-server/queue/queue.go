@@ -36,9 +36,13 @@ type Queue struct {
 
 // New creates a new prompt queue
 func New(verbose bool) *Queue {
+	settings := models.LoadSettings()
+	if verbose {
+		fmt.Printf("[%s] [Queue] Loaded %d rules from settings\n", time.Now().Format(time.RFC3339), len(settings.Rules))
+	}
 	return &Queue{
 		prompts:         make(map[string]*PendingPrompt),
-		settings:        models.DefaultSettings(),
+		settings:        settings,
 		pausedRemaining: make(map[string]time.Duration),
 		verbose:         verbose,
 	}
@@ -307,16 +311,29 @@ func (q *Queue) UpdateSettings(updates *models.Settings) *models.Settings {
 	// Merge native settings
 	q.settings.Native = updates.Native
 
+	// Persist to disk
+	if err := models.SaveSettings(q.settings); err != nil {
+		q.log("Error saving settings: %v", err)
+	} else {
+		q.log("Settings saved to disk (%d rules)", len(q.settings.Rules))
+	}
+
 	return q.settings
 }
 
-// matchRules finds the first matching rule for a tool
+// matchRules finds the most permissive matching rule for a tool
+// Evaluation hierarchy: auto-accept (most permissive) > accept-after > manual (least permissive)
 func (q *Queue) matchRules(toolName string, toolInput map[string]interface{}) models.RuleAction {
 	category := getToolCategory(toolName)
+	q.log("Matching rules for tool: %s (category: %s), %d rules configured", toolName, category, len(q.settings.Rules))
+
+	var mostPermissiveAction *models.RuleAction
+	var matchedRuleName string
 
 	for i := range q.settings.Rules {
 		rule := &q.settings.Rules[i]
 		if !rule.Enabled {
+			q.log("  Rule %d (%s): disabled, skipping", i, rule.Name)
 			continue
 		}
 
@@ -341,14 +358,54 @@ func (q *Queue) matchRules(toolName string, toolInput map[string]interface{}) mo
 		// Rule must have at least one criterion specified
 		hasAnyCriteria := rule.ToolName != "" || rule.Category != "" || rule.Pattern != ""
 
+		q.log("  Rule %d (%s): toolName=%q category=%q pattern=%q -> matches=%v hasAnyCriteria=%v",
+			i, rule.Name, rule.ToolName, rule.Category, rule.Pattern, matches, hasAnyCriteria)
+
 		if matches && hasAnyCriteria {
 			rule.MatchCount++
-			return rule.Action
+			q.log("  -> MATCHED! Action: %s", rule.Action.Type)
+
+			// Check if this rule is more permissive than the current best
+			if mostPermissiveAction == nil || isMorePermissive(rule.Action, *mostPermissiveAction) {
+				actionCopy := rule.Action
+				mostPermissiveAction = &actionCopy
+				matchedRuleName = rule.Name
+			}
 		}
 	}
 
+	if mostPermissiveAction != nil {
+		q.log("  -> Selected most permissive rule: %s (action: %s)", matchedRuleName, mostPermissiveAction.Type)
+		return *mostPermissiveAction
+	}
+
+	q.log("  -> No match, defaulting to manual")
 	// Default: manual approval
 	return models.RuleAction{Type: "manual"}
+}
+
+// isMorePermissive returns true if action1 is more permissive than action2
+// Hierarchy: auto-accept (most) > accept-after > manual (least)
+func isMorePermissive(action1, action2 models.RuleAction) bool {
+	permissiveness := map[string]int{
+		"auto-accept":  3,
+		"accept-after": 2,
+		"manual":       1,
+	}
+
+	perm1 := permissiveness[action1.Type]
+	perm2 := permissiveness[action2.Type]
+
+	if perm1 != perm2 {
+		return perm1 > perm2
+	}
+
+	// If both are accept-after, shorter delay is more permissive
+	if action1.Type == "accept-after" && action2.Type == "accept-after" {
+		return action1.Seconds < action2.Seconds
+	}
+
+	return false
 }
 
 // matchesPattern checks if the pattern (regex) matches against tool input
@@ -412,7 +469,6 @@ func getToolCategory(toolName string) string {
 	// Read tools
 	readTools := map[string]bool{
 		"Read": true, "Glob": true, "Grep": true,
-		"TaskList": true, "TaskGet": true, "TaskOutput": true,
 		"ListMcpResourcesTool": true, "ReadMcpResourceTool": true,
 		"ToolSearch": true,
 	}
@@ -423,7 +479,6 @@ func getToolCategory(toolName string) string {
 	// Write tools
 	writeTools := map[string]bool{
 		"Edit": true, "Write": true, "NotebookEdit": true,
-		"TaskCreate": true, "TaskUpdate": true,
 	}
 	if writeTools[toolName] {
 		return "write"
@@ -431,11 +486,20 @@ func getToolCategory(toolName string) string {
 
 	// Execute tools
 	executeTools := map[string]bool{
-		"Bash": true, "KillShell": true,
-		"Task": true, "Skill": true,
+		"Bash": true, "KillShell": true, "Skill": true,
 	}
 	if executeTools[toolName] {
 		return "execute"
+	}
+
+	// Task tools
+	taskTools := map[string]bool{
+		"Task": true, "TaskList": true, "TaskGet": true,
+		"TaskOutput": true, "TaskCreate": true, "TaskUpdate": true,
+		"TaskStop": true,
+	}
+	if taskTools[toolName] {
+		return "task"
 	}
 
 	// Web tools
