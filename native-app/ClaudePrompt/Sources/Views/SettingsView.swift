@@ -54,20 +54,19 @@ struct SettingsView: View {
             // Settings content
             Form {
                 Section("Rules") {
-                    Button {
-                        showingRules = true
-                    } label: {
-                        HStack {
-                            Label("Configure Rules", systemImage: "slider.horizontal.3")
-                            Spacer()
-                            Text("\(settingsManager.settings.server.rules.count)")
-                                .foregroundColor(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.7))
-                        }
+                    HStack {
+                        Label("Configure Rules", systemImage: "slider.horizontal.3")
+                        Spacer()
+                        Text("\(settingsManager.settings.server.rules.count)")
+                            .foregroundColor(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.7))
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        showingRules = true
+                    }
                 }
 
                 Section("Hotkeys") {

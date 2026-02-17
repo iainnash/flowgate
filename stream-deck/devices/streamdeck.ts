@@ -68,11 +68,13 @@ export class StreamDeckPlugin implements InputDevicePlugin {
   }
 
   onPromptsChanged(prompts: Prompt[]): void {
+    console.log(`[StreamDeck] Prompts changed: ${this.prompts.length} -> ${prompts.length}`);
     this.prompts = prompts;
     this.updateDisplay();
   }
 
-  onPromptResolved(_id: string): void {
+  onPromptResolved(id: string): void {
+    console.log(`[StreamDeck] Prompt resolved: ${id}`);
     // Display will be updated when onPromptsChanged is called
   }
 
@@ -221,6 +223,7 @@ export class StreamDeckPlugin implements InputDevicePlugin {
   private handleButtonPress(keyIndex: number): void {
     const slots = this.getPromptSlots();
     const L = STREAMDECK_LAYOUT;
+    console.log(`[StreamDeck] Button pressed: ${keyIndex}, prompts: ${this.prompts.length}, slots: ${slots.length}`);
 
     // Map button index to action
     switch (keyIndex) {
@@ -289,6 +292,7 @@ export class StreamDeckPlugin implements InputDevicePlugin {
 
     const slots = this.getPromptSlots();
     const L = STREAMDECK_LAYOUT;
+    console.log(`[StreamDeck] updateDisplay: ${slots.length} slots, prompts: ${this.prompts.map(p => p.id).join(', ') || 'none'}`);
 
     try {
       // Update prompt slot buttons (columns 0-3)

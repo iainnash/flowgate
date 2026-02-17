@@ -15,6 +15,7 @@
     deviceConnected,
     globalPaused,
     togglePauseAll,
+    resolvePrompt,
   } from './lib/stores';
   import { isUserPrompt, isExitPlanMode } from './lib/types';
   import type { Prompt } from './lib/types';
@@ -72,11 +73,46 @@
     requestNotificationPermission();
     startDevicePolling();
   });
+
+  function handleKeydown(e: KeyboardEvent) {
+    // Ignore if typing in an input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    // Ignore if settings modal is open
+    if (showSettings) return;
+
+    const sorted = sortPrompts($prompts);
+    if (sorted.length === 0) return;
+
+    // Number keys 1-4 accept prompts by position
+    if (e.key >= '1' && e.key <= '4') {
+      const index = parseInt(e.key) - 1;
+      if (index < sorted.length) {
+        const prompt = sorted[index];
+        // Don't allow keyboard accept for immediate auto-accept
+        if (prompt.acceptType !== 'auto-accept') {
+          resolvePrompt(prompt.id, { decision: 'allow' });
+        }
+      }
+      return;
+    }
+
+    // 'y' accepts first prompt, 'n' denies first prompt
+    const firstPrompt = sorted[0];
+    if (firstPrompt.acceptType === 'auto-accept') return;
+
+    if (e.key === 'y' || e.key === 'Y') {
+      resolvePrompt(firstPrompt.id, { decision: 'allow' });
+    } else if (e.key === 'n' || e.key === 'N') {
+      resolvePrompt(firstPrompt.id, { decision: 'deny', reason: 'Denied by keyboard' });
+    }
+  }
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <main class:light={$uiPrefs.theme === 'light'}>
   <header>
-    <h1>Claude Prompt UI</h1>
+    <h1 class="logo"><span class="flow">flow</span>gate</h1>
     <div class="header-right">
       <div class="volume-control">
         <button class="icon-btn" on:click={toggleMute} title={$uiPrefs.volume > 0 ? 'Mute' : 'Unmute'}>
@@ -194,10 +230,20 @@
     border-bottom: 1px solid var(--border-color, #333);
   }
 
-  h1 {
+  h1.logo {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, 'Cascadia Mono', monospace;
     font-size: 22px;
     font-weight: 600;
+    letter-spacing: -0.5px;
     margin: 0;
+  }
+
+  h1.logo .flow {
+    color: #22c55e;
+  }
+
+  :global([data-theme="light"]) h1.logo .flow {
+    color: #16a34a;
   }
 
   .header-right {

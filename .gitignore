@@ -46,3 +46,6 @@ hooks/prompt-hook
 
 # UI build output (served by Go server)
 go-server/public/
+
+# App build output
+build/

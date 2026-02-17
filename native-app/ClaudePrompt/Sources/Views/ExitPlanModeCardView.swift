@@ -191,16 +191,20 @@ struct ExitPlanModeCardView: View {
         .offset(y: appeared ? 0 : -20)
         .scaleEffect(appeared ? 1 : 0.95)
         .onAppear {
-            if enableAnimations {
-                // Use async to ensure view is fully laid out before animating
-                DispatchQueue.main.async {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0)) {
-                        appeared = true
+            if !appeared {
+                if enableAnimations {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            appeared = true
+                        }
                     }
+                } else {
+                    appeared = true
                 }
-            } else {
-                appeared = true
             }
+        }
+        .onDisappear {
+            appeared = false
         }
     }
 }

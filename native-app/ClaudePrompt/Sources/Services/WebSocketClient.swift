@@ -107,7 +107,7 @@ class WebSocketClient: NSObject, ObservableObject {
             alert.informativeText = """
                 Could not connect to the server. The authentication token may be invalid or missing.
 
-                Please restart the Claude Prompt app to regenerate the server and token.
+                Please restart Flowgate to regenerate the server and token.
 
                 If the problem persists:
                 1. Quit the app completely
@@ -242,7 +242,7 @@ extension WebSocketClient: Starscream.WebSocketDelegate {
             connectionStatus = .connected
             delegate?.webSocketDidReceive(.connected)
 
-        case .disconnected(let reason, let code):
+        case .disconnected(_, let code):
             isConnected = false
             connectionStatus = .disconnected
 

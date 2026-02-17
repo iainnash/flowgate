@@ -1,6 +1,10 @@
-# Claude Prompt UI
+<p align="center">
+  <img src="docs/icon-light.png" alt="Flowgate" width="128" height="128">
+</p>
 
-A visual approval interface for Claude Code tool calls with Stream Deck support.
+<h1 align="center">Flowgate</h1>
+
+<p align="center">A visual approval interface for Claude Code tool calls with Stream Deck support.</p>
 
 ## Architecture
 
@@ -56,7 +60,7 @@ Add to `~/.config/claude/settings.json`:
 
 ## Authentication
 
-The Claude Prompt UI uses token-based authentication to prevent unauthorized access from other processes on your machine.
+Flowgate uses token-based authentication to prevent unauthorized access from other processes on your machine.
 
 ### How It Works
 
@@ -219,13 +223,13 @@ Build production DMG:
 ```
 
 Output:
-- `build/Claude Prompt.app` - App bundle
-- `build/Claude-Prompt.dmg` - Installer DMG
+- `build/Flowgate.app` - App bundle
+- `build/Flowgate.dmg` - Installer DMG
 
 Install:
 ```bash
-open build/Claude-Prompt.dmg
-# Drag 'Claude Prompt' to Applications
+open build/Flowgate.dmg
+# Drag 'Flowgate' to Applications
 ```
 
 Menu bar options:
@@ -294,7 +298,7 @@ Health check endpoint.
 ### Project Structure
 
 ```
-claude-prompt-ui/
+flowgate/
 ├── go-server/          # Go backend
 │   ├── handlers/       # WebSocket hub
 │   ├── middleware/     # Auth middleware
@@ -306,7 +310,7 @@ claude-prompt-ui/
 │       ├── lib/        # Stores + types
 │       └── App.svelte
 ├── native-app/         # macOS menu bar app
-│   └── ClaudePrompt/
+│   └── Flowgate/
 │       └── Sources/
 │           ├── Services/   # WebSocket, Server, Token managers
 │           ├── Views/      # SwiftUI views
@@ -316,12 +320,13 @@ claude-prompt-ui/
 │   └── index.ts
 ├── hooks/              # Claude Code hooks
 │   └── prompt-hook.go  # Go hook
+├── docs/               # Documentation
 ├── scripts/            # Build scripts
 │   ├── build-app.sh    # Build macOS app + DMG
 │   └── generate-token.sh
 └── build/              # Build output (generated)
-    ├── Claude Prompt.app
-    └── Claude-Prompt.dmg
+    ├── Flowgate.app
+    └── Flowgate.dmg
 ```
 
 ### Running Tests

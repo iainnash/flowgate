@@ -21,9 +21,6 @@ struct PromptCardView: View {
     // Animation state for entrance
     @State private var appeared: Bool = false
 
-    // Animation state for exit (auto-dismiss)
-    @State private var shouldDismiss: Bool = false
-
     // Computed properties for prompt type (based on server-provided acceptType)
     private var isImmediateAutoAccept: Bool { prompt.acceptType == .autoAccept }
     private var isAcceptAfter: Bool { prompt.acceptType == .acceptAfter }
@@ -102,35 +99,28 @@ struct PromptCardView: View {
                 .stroke(isActive ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        // Entrance animation - set initial state immediately
-        .opacity(appeared && !shouldDismiss ? 1 : 0)
-        .offset(y: appeared && !shouldDismiss ? 0 : -20)
-        .scaleEffect(appeared && !shouldDismiss ? 1 : 0.95)
+        // Entrance animation
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -20)
+        .scaleEffect(appeared ? 1 : 0.95)
         .onAppear {
-            // Delay animation start slightly to prevent flash on first frame
-            if enableAnimations {
-                // Use async to ensure view is fully laid out before animating
-                DispatchQueue.main.async {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0)) {
-                        appeared = true
-                    }
-                }
-            } else {
-                appeared = true
-            }
-
-            // Auto-dismiss after 3 seconds for immediate auto-accept prompts
-            if isImmediateAutoAccept {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    if enableAnimations {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            shouldDismiss = true
+            // Reset state when view appears (handles LazyVStack reuse)
+            if !appeared {
+                if enableAnimations {
+                    // Small delay to let view layout complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            appeared = true
                         }
-                    } else {
-                        shouldDismiss = true
                     }
+                } else {
+                    appeared = true
                 }
             }
+        }
+        .onDisappear {
+            // Reset for next appearance (handles LazyVStack recycling)
+            appeared = false
         }
     }
 

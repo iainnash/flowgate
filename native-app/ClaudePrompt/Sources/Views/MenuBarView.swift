@@ -117,7 +117,7 @@ struct MenuBarView: View {
                 MenuButton(title: "Settings...", shortcut: "⌘,") {
                     onShowSettings()
                 }
-                MenuButton(title: "Quit Claude Prompt", shortcut: "⌘Q") {
+                MenuButton(title: "Quit Flowgate", shortcut: "⌘Q") {
                     onQuit()
                 }
             }

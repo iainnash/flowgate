@@ -139,7 +139,9 @@ function handleMessage(message: WsMessage): void {
       break;
       
     case 'prompt:resolved':
+      console.log(`[Client] Resolving prompt ${message.id}, had ${prompts.length} prompts`);
       prompts = prompts.filter(p => p.id !== message.id);
+      console.log(`[Client] After filter: ${prompts.length} prompts remaining`);
       streamDeck?.onPromptsChanged(prompts);
       streamDeck?.onPromptResolved(message.id);
       console.log(`[Client] Prompt resolved: ${message.id}`);

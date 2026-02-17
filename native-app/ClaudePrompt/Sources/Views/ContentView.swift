@@ -84,7 +84,29 @@ struct ContentView: View {
         }
 
         let key = event.charactersIgnoringModifiers ?? ""
+        let hasCmd = event.modifierFlags.contains(.command)
+        let hasShift = event.modifierFlags.contains(.shift)
+        let hasCmdShift = hasCmd && hasShift
 
+        // ⌘⇧Y - Accept selected
+        if hasCmdShift && key.lowercased() == "y" {
+            acceptSelected()
+            return nil
+        }
+
+        // ⌘⇧N - Deny selected
+        if hasCmdShift && key.lowercased() == "n" {
+            denySelected()
+            return nil
+        }
+
+        // ⌘⇧O - Show other dialog
+        if hasCmdShift && key.lowercased() == "o" {
+            showOtherForSelected()
+            return nil
+        }
+
+        // Navigation without modifiers
         switch key {
         case "j":  // Vim down
             selectNext()
@@ -103,10 +125,10 @@ struct ContentView: View {
         case 126:  // Up arrow
             selectPrevious()
             return nil
-        case 36:   // Enter - accept
+        case 36:   // Enter - also accept (convenience)
             acceptSelected()
             return nil
-        case 53:   // Escape - deny
+        case 53:   // Escape - also deny (convenience)
             denySelected()
             return nil
         default:
@@ -140,6 +162,12 @@ struct ContentView: View {
         promptManager.resolvePrompt(prompt, decision: .deny)
     }
 
+    private func showOtherForSelected() {
+        guard selectedIndex < filteredPrompts.count else { return }
+        selectedPromptForOther = filteredPrompts[selectedIndex]
+        showingOtherDialog = true
+    }
+
     var selectedPrompt: Prompt? {
         guard selectedIndex < filteredPrompts.count else { return nil }
         return filteredPrompts[selectedIndex]
@@ -147,11 +175,22 @@ struct ContentView: View {
 
     private var headerView: some View {
         HStack {
+            // Hidden focus target - captures initial focus to avoid highlighting visible buttons
+            Color.clear
+                .frame(width: 0, height: 0)
+                .focusable(true)
+
             // Connection status
             HStack(spacing: 6) {
                 Circle()
                     .fill(promptManager.isConnected ? Color.green : Color.red)
                     .frame(width: 8, height: 8)
+                Text("Flowgate")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Text("·")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Text(promptManager.connectionStatus)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -171,6 +210,32 @@ struct ContentView: View {
                     .cornerRadius(10)
             }
 
+            // Accept All button - always visible, disabled when no prompts
+            Button {
+                promptManager.acceptAll()
+            } label: {
+                Image(systemName: "checkmark.circle")
+                    .font(.title3)
+                    .foregroundColor(promptManager.promptCount > 0 ? .green : .secondary.opacity(0.4))
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .disabled(promptManager.promptCount == 0)
+            .help("Accept all prompts")
+
+            // Deny All button - always visible, disabled when no prompts
+            Button {
+                promptManager.denyAll()
+            } label: {
+                Image(systemName: "xmark.circle")
+                    .font(.title3)
+                    .foregroundColor(promptManager.promptCount > 0 ? .red : .secondary.opacity(0.4))
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .disabled(promptManager.promptCount == 0)
+            .help("Deny all prompts")
+
             // Pause/Play toggle button
             Button {
                 promptManager.togglePauseAll()
@@ -178,28 +243,11 @@ struct ContentView: View {
                 Image(systemName: promptManager.isPaused ? "play.fill" : "pause.fill")
                     .font(.title3)
                     .foregroundColor(promptManager.isPaused ? .orange : .green)
-                    .padding(4)  // Add padding around icon to give focus ring more space
+                    .padding(4)
             }
             .buttonStyle(.borderless)
-            .focusable(false)  // Remove from focus cycle
+            .focusable(false)
             .help(promptManager.isPaused ? "Resume auto-accept" : "Pause auto-accept")
-
-            // Quick actions menu
-            if promptManager.promptCount > 1 {
-                Menu {
-                    Button("Accept All") {
-                        promptManager.acceptAll()
-                    }
-                    Button("Deny All") {
-                        promptManager.denyAll()
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                }
-                .menuStyle(.borderlessButton)
-                .frame(width: 24)
-            }
 
             // Settings button
             Button {
@@ -209,6 +257,7 @@ struct ContentView: View {
                     .font(.title3)
             }
             .buttonStyle(.borderless)
+            .focusable(false)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

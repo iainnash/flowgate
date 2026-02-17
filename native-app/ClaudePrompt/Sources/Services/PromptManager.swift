@@ -101,6 +101,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
             case .connected:
                 isConnected = true
                 connectionStatus = "Connected"
+                // Clear stale prompts - server will send fresh list via prompts:list
+                prompts = []
 
             case .disconnected:
                 isConnected = false
@@ -150,7 +152,7 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         guard Bundle.main.bundleIdentifier != nil else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "Claude Prompt"
+        content.title = "Flowgate"
         content.body = "\(prompt.toolName): \(prompt.description)"
         content.sound = .default
 

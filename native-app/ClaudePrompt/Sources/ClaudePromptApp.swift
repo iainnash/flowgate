@@ -57,6 +57,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     nonisolated func applicationWillTerminate(_ notification: Notification) {
         Task { @MainActor in
             promptManager.disconnect()
+            ServerManager.shared.stopServer()
         }
     }
 
@@ -81,6 +82,75 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Connect to server (will receive settings via WebSocket)
         promptManager.connect()
+
+        // Show setup instructions on first launch
+        checkFirstLaunch()
+    }
+
+    private func checkFirstLaunch() {
+        let hasLaunchedKey = "hasLaunchedBefore"
+        let defaults = UserDefaults.standard
+
+        if !defaults.bool(forKey: hasLaunchedKey) {
+            defaults.set(true, forKey: hasLaunchedKey)
+            showSetupInstructions()
+        }
+    }
+
+    private func showSetupInstructions() {
+        // Get hook path from app bundle
+        let hookPath: String
+        if let resourcePath = Bundle.main.resourcePath {
+            hookPath = (resourcePath as NSString).appendingPathComponent("prompt-hook")
+        } else {
+            hookPath = "/Applications/Flowgate.app/Contents/Resources/prompt-hook"
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Welcome to Flowgate!"
+        alert.informativeText = """
+            To integrate with Claude Code, add this to your ~/.claude/settings.json:
+
+            {
+              "hooks": {
+                "PreToolUse": ["\(hookPath)"]
+              }
+            }
+
+            The hook path has been copied to your clipboard.
+            """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Open Settings File")
+        alert.addButton(withTitle: "OK")
+
+        // Copy hook path to clipboard
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(hookPath, forType: .string)
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            // Open or create settings file
+            let settingsPath = NSString(string: "~/.claude/settings.json").expandingTildeInPath
+            let settingsURL = URL(fileURLWithPath: settingsPath)
+
+            // Create directory if needed
+            let settingsDir = settingsURL.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: settingsDir, withIntermediateDirectories: true)
+
+            // Create file if it doesn't exist
+            if !FileManager.default.fileExists(atPath: settingsPath) {
+                let defaultSettings = """
+                    {
+                      "hooks": {
+                        "PreToolUse": ["\(hookPath)"]
+                      }
+                    }
+                    """
+                try? defaultSettings.write(to: settingsURL, atomically: true, encoding: .utf8)
+            }
+
+            NSWorkspace.shared.open(settingsURL)
+        }
     }
 
     private func setupApplicationMenu() {
@@ -91,11 +161,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let appMenuItem = NSMenuItem()
         appMenuItem.submenu = appMenu
 
-        appMenu.addItem(NSMenuItem(title: "About Claude Prompt", action: #selector(showAbout), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem(title: "About Flowgate", action: #selector(showAbout), keyEquivalent: ""))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(NSMenuItem(title: "Quit Claude Prompt", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appMenu.addItem(NSMenuItem(title: "Quit Flowgate", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         mainMenu.addItem(appMenuItem)
 
@@ -265,7 +335,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "Claude Prompt")
+            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "Flowgate")
             button.action = #selector(togglePopover)
             button.target = self
 
@@ -341,7 +411,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: contentView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Claude Prompt"
+        window.title = "Flowgate"
         window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -365,10 +435,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         floatingWindow = window
 
-        // Show window on launch if there are prompts
-        if promptManager.promptCount > 0 {
-            showFloatingWindow()
-        }
+        // Always show window on launch
+        showFloatingWindow()
 
         // Watch for new prompts to show window
         observeNewPrompts()
@@ -488,25 +556,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let animationsEnabled = settingsManager.settings.server.native.enableAnimations
 
         if animationsEnabled {
-            // Start transparent BEFORE showing
+            // Disable implicit animations during setup
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0
             window.alphaValue = 0
-            window.orderFront(nil)
+            NSAnimationContext.endGrouping()
 
-            // Activate app (this sometimes causes a flash if done after makeKey)
+            // Show and activate
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
 
-            // Make key after activating to prevent flash
-            window.makeKey()
-
-            // Fade in with a slight delay to prevent flash
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.15
-                    window.animator().alphaValue = 1
-                }
+            // Animate fade in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.2
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 1
             }
         } else {
-            // No animation
             window.alphaValue = 1
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -586,7 +652,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             button.image = image
         } else {
-            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "Claude Prompt")
+            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "Flowgate")
         }
     }
 }
