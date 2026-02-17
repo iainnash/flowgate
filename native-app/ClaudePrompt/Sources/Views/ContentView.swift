@@ -334,6 +334,24 @@ struct ContentView: View {
             .onTapGesture {
                 selectedIndex = index
             }
+        } else if prompt.toolName == "AskUserQuestion" {
+            UserQuestionCardView(
+                prompt: prompt,
+                sessionColor: promptManager.colorForSession(prompt.sessionId),
+                isActive: index == selectedIndex,
+                windowFocused: controlActiveState == .key,
+                enableAnimations: settingsManager.settings.server.native.enableAnimations,
+                onSubmit: { updatedInput in
+                    promptManager.resolvePrompt(prompt, decision: .allow, updatedInput: updatedInput)
+                },
+                onAskInTerminal: {
+                    promptManager.resolvePrompt(prompt, decision: .ask, reason: "User skipped to terminal")
+                }
+            )
+            .id(prompt.id)
+            .onTapGesture {
+                selectedIndex = index
+            }
         } else {
             PromptCardView(
                 prompt: prompt,

@@ -53,8 +53,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         webSocket.disconnect()
     }
 
-    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil) {
-        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason)
+    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil) {
+        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason, updatedInput: updatedInput)
     }
 
     func acceptCurrent() {

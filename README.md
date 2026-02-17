@@ -4,385 +4,217 @@
 
 <h1 align="center">Flowgate</h1>
 
-<p align="center">A visual approval interface for Claude Code tool calls with Stream Deck support.</p>
+<p align="center">
+  <strong>Take control of your AI agent</strong><br>
+  A visual approval interface for Claude Code that lets you review, modify, and approve tool calls before they execute.
+</p>
 
-## Architecture
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS-blue" alt="macOS">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
+  <img src="https://img.shields.io/github/v/release/iainnash/flowgate" alt="Release">
+</p>
 
-- **Native macOS App** (`native-app/`): SwiftUI menu bar app with embedded server
-- **Go Server** (`go-server/`): High-performance backend handling prompt queue and WebSocket connections
-- **Web UI** (`ui/`): Svelte-based approval interface
-- **Stream Deck Client** (`stream-deck/`): Node.js client for hardware button integration
-- **Go Hook** (`hooks/`): Claude Code hook written in Go with camelCase API
+---
 
-## Quick Start
+## Why Flowgate?
 
-### 1. Install Dependencies
+When using AI coding assistants like Claude Code, the agent can execute commands, edit files, and make changes to your system. Flowgate gives you a **visual approval layer** that:
 
-```bash
-pnpm install
-```
+- **Shows you exactly what Claude wants to do** before it happens
+- **Lets you approve, deny, or modify** each action
+- **Works across multiple Claude sessions** simultaneously
+- **Integrates with Stream Deck** for hardware button control
 
-### 2. Build Everything
+<p align="center">
+  <img src="docs/prompt-swift.png" alt="Flowgate Native App" width="500">
+</p>
 
-```bash
-pnpm build
-```
+## Installation
 
-This builds:
-- Go server binary
-- Go hook binary
-- Web UI
-- Stream Deck client (TypeScript)
+### Download the App
 
-### 3. Run Development Mode
+1. Download the latest `Flowgate.dmg` from [Releases](https://github.com/iainnash/flowgate/releases)
+2. Open the DMG and drag **Flowgate** to your Applications folder
+3. Launch Flowgate from Applications
 
-Terminal 1 - Server + UI:
-```bash
-pnpm dev
-```
+### Configure Claude Code
 
-Terminal 2 - Stream Deck (optional):
-```bash
-pnpm dev:stream-deck
-```
-
-### 4. Configure Claude Code Hook
-
-Add to `~/.config/claude/settings.json`:
+Add Flowgate as a hook in your Claude Code settings (`~/.config/claude/settings.json`):
 
 ```json
 {
   "hooks": {
-    "PreToolUse": "/absolute/path/to/claude-prompt-ui/hooks/prompt-hook"
+    "PreToolUse": "/Applications/Flowgate.app/Contents/Resources/prompt-hook"
   }
 }
 ```
 
-## Authentication
-
-Flowgate uses token-based authentication to prevent unauthorized access from other processes on your machine.
-
-### How It Works
-
-1. **First Launch**: When you launch the desktop app for the first time, the embedded server automatically generates a secure authentication token and saves it to `~/.claude-prompt-ui/token`
-
-2. **Automatic Authentication**: The desktop app, hook, and web UI all read this token automatically - no manual configuration needed
-
-3. **Secure Storage**: The token file is created with restricted permissions (0600) so only you can read it
-
-### For Claude Code Hook
-
-The hook reads the token automatically from `~/.claude-prompt-ui/token`. No configuration required - just launch the desktop app first to generate the token.
-
-**Alternative:** Set via environment variable:
-```bash
-export CLAUDE_PROMPT_UI_TOKEN="your-token-here"
-```
-
-### For Web UI
-
-When using "Open Web UI" from the desktop app menu, the token is passed automatically. To access manually:
-
-```bash
-# Read token from file
-TOKEN=$(cat ~/.claude-prompt-ui/token)
-
-# Open browser with token
-open "http://localhost:8888?token=$TOKEN"
-```
-
-### Token Location
-
-**Token file:** `~/.claude-prompt-ui/token`
-**Permissions:** 0600 (owner read/write only)
-
-### Regenerating Token
-
-If you need to regenerate the token:
-
-```bash
-# Delete existing token
-rm ~/.claude-prompt-ui/token
-
-# Restart desktop app or server
-# A new token will be generated automatically
-```
-
-### Manual Server (Advanced)
-
-If running the server manually instead of using the embedded server in the desktop app:
-
-```bash
-cd go-server
-go build -o claude-prompt-server
-./claude-prompt-server
-```
-
-The server will generate a token at `~/.claude-prompt-ui/token` on first run.
-
-## Components
-
-### Go Server
-
-Location: `go-server/`
-
-```bash
-cd go-server
-
-# Development
-make run
-
-# Build optimized binary
-make build-release
-
-# Create universal macOS binary
-make universal
-```
-
-Server runs on `http://127.0.0.1:8888`
-
-Environment variables:
-- `PORT`: Server port (default: 8888)
-- `VERBOSE`: Enable verbose logging (default: false)
-
-**Authentication:** The server automatically generates an authentication token on first run at `~/.claude-prompt-ui/token`. All API endpoints except `/api/health` require this token.
-
-### Web UI
-
-Location: `ui/`
-
-Built with Svelte + Vite. Features:
-- Real-time prompt visualization
-- Auto-accept countdown timers
-- Tool categorization with color coding
-- Multi-session support
-- Dark theme
-- Sound notifications (80s synth)
-
-### Stream Deck Client
-
-Location: `stream-deck/`
-
-Node.js client that connects hardware Stream Deck to the Go server.
-
-Layout (15-key):
-```
-┌─────┬─────┬─────┬─────┬─────┐
-│ 1-Y │ 2-Y │ 3-Y │ 4-Y │ ALL │
-├─────┼─────┼─────┼─────┼─────┤
-│ 1-N │ 2-N │ 3-N │ 4-N │     │
-├─────┼─────┼─────┼─────┼─────┤
-│ 1-O │ 2-O │ 3-O │ 4-O │PAUSE│
-└─────┴─────┴─────┴─────┴─────┘
-```
-
-Configuration:
-```bash
-SERVER_URL=ws://localhost:8888/ws pnpm --filter stream-deck-client dev
-```
-
-### Go Hook
-
-Location: `hooks/prompt-hook.go`
-
-Claude Code hook that sends tool calls to the server for approval.
-
-Build:
-```bash
-cd hooks
-make build
-```
-
-Configuration via environment:
-- `CLAUDE_PROMPT_UI_SERVER`: Server URL (default: http://127.0.0.1:8888)
-- `CLAUDE_PROMPT_UI_TIMEOUT`: Timeout in ms (default: 120000)
-- `CLAUDE_PROMPT_UI_TOKEN`: Authentication token (auto-read from `~/.claude-prompt-ui/token` if not set)
-
-### Native macOS App
-
-Location: `native-app/ClaudePrompt/`
-
-SwiftUI menu bar application with embedded Go server. Features:
-- **Menu bar icon** with badge showing pending prompt count
-- **Floating window** for prompt management
-- **Embedded server** - starts automatically on app launch
-- **Auto-authentication** - reads token from shared location
-- **Global hotkeys** for accept/deny/toggle
-- **Server log viewer** for debugging
-
-Build and run (development):
-```bash
-cd native-app/ClaudePrompt
-swift build
-.build/debug/ClaudePrompt
-```
-
-Build production DMG:
-```bash
-./scripts/build-app.sh
-```
-
-Output:
-- `build/Flowgate.app` - App bundle
-- `build/Flowgate.dmg` - Installer DMG
-
-Install:
-```bash
-open build/Flowgate.dmg
-# Drag 'Flowgate' to Applications
-```
-
-Menu bar options:
-- **Show Window** - Open floating prompt window
-- **Open Web UI** - Open browser with authentication token
-- **Accept All / Deny All** - Quick actions for pending prompts
-- **Start/Restart Server** - Control embedded server
-- **Show Server Log** - View real-time server output
-- **Quit** - Stop server and exit
-
-Environment variables:
-- `CLAUDE_PROMPT_SERVER_PATH`: Override path to server binary (optional)
-
-## API
-
-### POST /api/prompt
-
-Hook endpoint. Accepts both camelCase and snake_case for compatibility.
-
-**Authentication:** Required via `Authorization: Bearer <token>` header or query parameter `?token=<token>`
-
-Request (camelCase - Go hook):
-```json
-{
-  "sessionId": "abc123",
-  "toolName": "Bash",
-  "toolInput": { "command": "ls -la" },
-  "hookEventName": "PreToolUse",
-  "cwd": "/path/to/project"
-}
-```
-
-Response:
-```json
-{
-  "decision": "allow",
-  "reason": "Auto-accepted by timer"
-}
-```
-
-### WebSocket /ws
-
-Real-time updates for UI and Stream Deck clients.
-
-**Authentication:** Required via query parameter `?token=<token>`
-
-Server messages:
-- `prompt:new` - New prompt added
-- `prompt:resolved` - Prompt was resolved
-- `prompt:updated` - Prompt state changed (e.g., pause/resume)
-- `prompts:list` - Full prompt list
-- `pause:changed` - Global pause state changed
-
-Client messages:
-- `resolve` - Resolve a specific prompt
-- `resolve-all` - Resolve all pending prompts
-- `toggle-pause` - Toggle global pause
-- `list` - Request prompt list
-
-### GET /api/health
-
-Health check endpoint.
-
-## Development
-
-### Project Structure
-
-```
-flowgate/
-├── go-server/          # Go backend
-│   ├── handlers/       # WebSocket hub
-│   ├── middleware/     # Auth middleware
-│   ├── models/         # Data types
-│   ├── queue/          # Prompt queue + timers
-│   └── main.go
-├── ui/                 # Svelte frontend
-│   └── src/
-│       ├── lib/        # Stores + types
-│       └── App.svelte
-├── native-app/         # macOS menu bar app
-│   └── Flowgate/
-│       └── Sources/
-│           ├── Services/   # WebSocket, Server, Token managers
-│           ├── Views/      # SwiftUI views
-│           └── Models/     # Data models
-├── stream-deck/        # Stream Deck client
-│   ├── devices/
-│   └── index.ts
-├── hooks/              # Claude Code hooks
-│   └── prompt-hook.go  # Go hook
-├── docs/               # Documentation
-├── scripts/            # Build scripts
-│   ├── build-app.sh    # Build macOS app + DMG
-│   └── generate-token.sh
-└── build/              # Build output (generated)
-    ├── Flowgate.app
-    └── Flowgate.dmg
-```
-
-### Running Tests
-
-```bash
-# All tests
-pnpm test
-
-# Watch mode
-pnpm test:watch
-
-# E2E tests
-pnpm test:e2e
-```
-
-### Building for Production
-
-```bash
-# Build everything
-pnpm build
-
-# Go server only
-pnpm build:server
-
-# Hook only
-pnpm build:hook
-
-# Stream Deck client only
-pnpm build:stream-deck
-```
+That's it! Flowgate will now intercept tool calls from Claude Code.
 
 ## Features
 
-### Auto-Accept Rules
+### Visual Approval Interface
 
-Configure in `go-server/models/types.go`:
+See exactly what Claude wants to do with syntax-highlighted diffs, command previews, and file path context.
 
-- `auto-accept`: Approve immediately (no UI display)
-- `accept-after`: Show in UI with countdown timer
-- `manual`: Require explicit approval
+<p align="center">
+  <img src="docs/prompt-web.png" alt="Web UI" width="600">
+</p>
 
-### Pause/Resume
+### Configurable Auto-Accept Rules
 
-Global pause stops all auto-accept timers. Timers resume from remaining time when unpaused.
+Set up rules to automatically approve safe operations while requiring manual review for sensitive ones:
+
+- **Auto-accept**: Approve immediately (read operations, safe commands)
+- **Accept after timer**: Show countdown, auto-approve if no objection
+- **Manual**: Always require explicit approval
+
+<p align="center">
+  <img src="docs/settings-swift.png" alt="Settings" width="500">
+</p>
+
+### Multiple Interfaces
+
+- **Native macOS App**: Menu bar icon with floating window
+- **Web UI**: Full-featured browser interface
+- **Stream Deck**: Hardware buttons for quick approvals
 
 ### Multi-Session Support
 
-Handle multiple Claude Code sessions simultaneously with color-coded badges.
+Handle multiple Claude Code sessions simultaneously with color-coded badges to distinguish between them.
 
-### Stream Deck Integration
+## Security
 
-Physical buttons for:
-- Approve/deny individual prompts (slots 1-4)
-- Approve all pending prompts
-- Pause/resume auto-accept timers
+Flowgate is designed with security as a priority:
+
+### Fully Local
+
+- **No cloud services**: Everything runs on your machine
+- **No data collection**: Your code and commands stay private
+- **Localhost only**: Server binds to 127.0.0.1
+
+### Token-Based Authentication
+
+- **Automatic token generation**: Secure 32-byte token created on first launch
+- **Restricted permissions**: Token file is owner-read-only (0600)
+- **No manual setup required**: Just launch the app
+
+### Configurable Permissions
+
+Create rules to control what gets auto-approved:
+
+```
+Rule: "Allow read operations"
+  Tool: Glob, Grep, Read
+  Action: Auto-accept
+
+Rule: "Review file edits"
+  Tool: Edit, Write
+  Action: Manual approval
+
+Rule: "Allow npm/pnpm after delay"
+  Tool: Bash
+  Pattern: ^(npm|pnpm)\s
+  Action: Accept after 3 seconds
+```
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Claude Code                               │
+│  "I want to run: npm install && npm run build"              │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼ PreToolUse hook
+┌─────────────────────────────────────────────────────────────┐
+│                    Flowgate Hook                             │
+│  Sends tool request to local server                         │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼ HTTP POST
+┌─────────────────────────────────────────────────────────────┐
+│                    Flowgate Server                           │
+│  Queues prompt, notifies connected clients                  │
+└─────────────┬─────────────────────────┬─────────────────────┘
+              │                         │
+              ▼ WebSocket               ▼ WebSocket
+┌─────────────────────────┐   ┌────────────────────────────────┐
+│    Native App / Web UI   │   │    Stream Deck Client          │
+│  Shows prompt, waits     │   │  Lights up approval buttons   │
+│  for user decision       │   │                                │
+└─────────────┬───────────┘   └────────────────────────────────┘
+              │
+              ▼ User clicks "Yes"
+┌─────────────────────────────────────────────────────────────┐
+│                    Claude Code                               │
+│  Executes: npm install && npm run build                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The hook **blocks** Claude Code until you make a decision, ensuring nothing executes without your approval.
+
+## Building from Source
+
+### Prerequisites
+
+- Go 1.21+
+- Node.js 20+
+- pnpm
+- Xcode (for native app)
+
+### Quick Build
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build everything
+pnpm build
+
+# Build macOS app + DMG
+./scripts/build-app.sh
+```
+
+### Development Mode
+
+```bash
+# Start Go server + Vite dev server with hot reload
+pnpm dev
+
+# In another terminal, start Stream Deck client (optional)
+pnpm dev:stream-deck
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed build instructions and architecture.
+
+## Architecture
+
+Flowgate consists of four main components:
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Go Server** | Go, Gorilla WebSocket | Backend API, prompt queue, WebSocket hub |
+| **Web UI** | Svelte, Vite | Browser-based approval interface |
+| **Native App** | Swift, SwiftUI | macOS menu bar app with embedded server |
+| **Hook** | Go | Claude Code integration, sends prompts to server |
+
+All components communicate via WebSocket for real-time updates.
+
+## Documentation
+
+- [Development Guide](docs/DEVELOPMENT.md) - Build instructions and architecture
+- [Authentication](docs/AUTHENTICATION.md) - Token-based security details
+- [Deployment](docs/DEPLOYMENT.md) - Production deployment options
+- [API Reference](docs/API.md) - Server endpoints and WebSocket protocol
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  Built for developers who want visibility into their AI assistant's actions.
+</p>

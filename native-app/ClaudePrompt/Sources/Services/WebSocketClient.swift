@@ -187,10 +187,13 @@ class WebSocketClient: NSObject, ObservableObject {
 
     // MARK: - Send Messages
 
-    func sendResolve(id: String, decision: Decision, reason: String? = nil) {
+    func sendResolve(id: String, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil) {
         var decisionData: [String: Any] = ["decision": decision.rawValue]
         if let reason = reason {
             decisionData["reason"] = reason
+        }
+        if let updatedInput = updatedInput {
+            decisionData["updatedInput"] = updatedInput
         }
 
         let message: [String: Any] = [
