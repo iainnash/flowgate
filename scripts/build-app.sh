@@ -168,19 +168,34 @@ echo "Step 6: Creating app icon..."
 ICON_SOURCE="$PROJECT_ROOT/docs/flowgate-icon-1024x1024.png"
 ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
 
-# Function to create icon with rounded corners (macOS style ~22% radius)
+# Function to create icon with padding and rounded corners (Apple HIG compliant)
+# - ~10% padding on each side (icon content is 80% of canvas)
+# - ~22% corner radius relative to content size
 create_rounded_icon() {
     local size=$1
     local output=$2
-    local radius=$(echo "$size * 0.2237" | bc | cut -d. -f1)
+    local content_size=$(echo "$size * 0.80" | bc | cut -d. -f1)
+    local radius=$(echo "$content_size * 0.2237" | bc | cut -d. -f1)
+    local tmp_resized="/tmp/icon_resized_$size.png"
+    local tmp_mask="/tmp/icon_mask_$size.png"
+    local tmp_content="/tmp/icon_content_$size.png"
 
-    magick "$ICON_SOURCE" -resize ${size}x${size} \
-        \( +clone -alpha extract \
-           -draw "fill black polygon 0,0 0,$radius $radius,0 fill white circle $radius,$radius $radius,0" \
-           \( +clone -flip \) -compose Multiply -composite \
-           \( +clone -flop \) -compose Multiply -composite \
-        \) -alpha off -compose CopyOpacity -composite \
-        "$output" 2>/dev/null
+    # Step 1: Resize source image
+    magick "$ICON_SOURCE" -resize ${content_size}x${content_size} "$tmp_resized"
+
+    # Step 2: Create rounded rectangle mask
+    magick -size ${content_size}x${content_size} xc:none \
+        -fill white -draw "roundrectangle 0,0,$((content_size-1)),$((content_size-1)),$radius,$radius" \
+        "$tmp_mask"
+
+    # Step 3: Apply mask as alpha channel
+    magick "$tmp_resized" \( "$tmp_mask" -alpha copy \) -compose CopyOpacity -composite "$tmp_content"
+
+    # Step 4: Center on transparent canvas for padding
+    magick "$tmp_content" -gravity center -background none -extent ${size}x${size} PNG32:"$output"
+
+    # Cleanup temp files
+    rm -f "$tmp_resized" "$tmp_mask" "$tmp_content"
 }
 
 if [ -f "$ICON_SOURCE" ]; then

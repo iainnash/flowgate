@@ -1,6 +1,6 @@
 # Stream Deck Client
 
-Node.js client that connects Stream Deck hardware to the Claude Prompt UI Go server.
+Node.js client that connects Stream Deck hardware to the Flowgate server.
 
 ## Features
 
