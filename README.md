@@ -159,23 +159,92 @@ The hook **blocks** Claude Code until you make a decision, ensuring nothing exec
 
 ### Prerequisites
 
-- Go 1.21+
-- Node.js 20+
-- pnpm
-- Xcode (for native app)
+| Tool | Version | Installation |
+|------|---------|--------------|
+| Go | 1.21+ | `brew install go` |
+| Node.js | 20+ | `brew install node` |
+| pnpm | 10+ | `npm install -g pnpm` or `brew install pnpm` |
+| Xcode | Latest | Mac App Store (required for native app) |
 
-### Quick Build
+Verify your setup:
+```bash
+go version      # go1.21 or higher
+node --version  # v20 or higher
+pnpm --version  # 10 or higher
+```
+
+### Clone and Build
 
 ```bash
+# Clone the repository
+git clone https://github.com/iainnash/flowgate.git
+cd flowgate
+
 # Install dependencies
 pnpm install
 
-# Build everything
+# Build all components (server, hook, UI)
 pnpm build
+```
 
-# Build macOS app + DMG
+### Build the macOS App
+
+```bash
+# Build Flowgate.app and Flowgate.dmg
 ./scripts/build-app.sh
 ```
+
+This creates:
+- `build/Flowgate.app` - The application bundle
+- `build/Flowgate.dmg` - Installer disk image
+
+### Build Individual Components
+
+```bash
+# Go server only
+pnpm build:server
+
+# Hook binary only
+pnpm build:hook
+
+# Web UI only
+pnpm --filter ui build
+
+# Stream Deck client
+pnpm build:stream-deck
+```
+
+### Running After Build
+
+**Option 1: Native App (Recommended)**
+```bash
+open build/Flowgate.app
+```
+
+**Option 2: Standalone Server**
+```bash
+# Generate auth token
+./scripts/generate-token.sh
+
+# Start the server
+./go-server/claude-prompt-server
+```
+
+Then open http://localhost:8888 in your browser.
+
+### Configure Claude Code
+
+Add Flowgate as a hook in `~/.config/claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": "/path/to/flowgate/hooks/prompt-hook"
+  }
+}
+```
+
+Use the absolute path to your built hook binary.
 
 ### Development Mode
 
@@ -187,7 +256,16 @@ pnpm dev
 pnpm dev:stream-deck
 ```
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed build instructions and architecture.
+### Verify Installation
+
+1. Start Flowgate (app or server)
+2. In a terminal, test the hook:
+   ```bash
+   echo '{"sessionId":"test","toolName":"Bash","toolInput":{"command":"echo hello"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | ./hooks/prompt-hook
+   ```
+3. A prompt should appear in the Flowgate UI
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed architecture and troubleshooting.
 
 ## Architecture
 
