@@ -23,24 +23,24 @@ echo "Step 1: Building Go server..."
 cd "$GO_SERVER_DIR"
 
 echo "  Building for arm64..."
-GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o "$BUILD_DIR/claude-prompt-server-arm64"
+GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o "$BUILD_DIR/flowgate-server-arm64"
 
 echo "  Building for amd64..."
-GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o "$BUILD_DIR/claude-prompt-server-amd64"
+GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o "$BUILD_DIR/flowgate-server-amd64"
 
 echo "  Creating universal binary..."
 lipo -create \
-    "$BUILD_DIR/claude-prompt-server-arm64" \
-    "$BUILD_DIR/claude-prompt-server-amd64" \
-    -output "$BUILD_DIR/claude-prompt-server"
+    "$BUILD_DIR/flowgate-server-arm64" \
+    "$BUILD_DIR/flowgate-server-amd64" \
+    -output "$BUILD_DIR/flowgate-server"
 
 # Clean up architecture-specific binaries
-rm "$BUILD_DIR/claude-prompt-server-arm64" "$BUILD_DIR/claude-prompt-server-amd64"
+rm "$BUILD_DIR/flowgate-server-arm64" "$BUILD_DIR/flowgate-server-amd64"
 
 # Make executable
-chmod +x "$BUILD_DIR/claude-prompt-server"
+chmod +x "$BUILD_DIR/flowgate-server"
 
-echo "  Server binary: $BUILD_DIR/claude-prompt-server"
+echo "  Server binary: $BUILD_DIR/flowgate-server"
 echo ""
 
 # Step 2: Build prompt-hook (universal binary)
@@ -84,6 +84,9 @@ swift build -c release
 # Find the built app
 SWIFT_BUILD_DIR="$NATIVE_APP_DIR/.build/release"
 APP_BINARY="$SWIFT_BUILD_DIR/ClaudePrompt"
+if [ ! -f "$APP_BINARY" ]; then
+    APP_BINARY="$SWIFT_BUILD_DIR/Flowgate"
+fi
 
 if [ ! -f "$APP_BINARY" ]; then
     echo "Error: Swift build failed - binary not found at $APP_BINARY"
@@ -108,11 +111,11 @@ mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
 
 # Copy binary
-cp "$APP_BINARY" "$MACOS_DIR/ClaudePrompt"
+cp "$APP_BINARY" "$MACOS_DIR/Flowgate"
 
 # Copy server binary to Resources
-cp "$BUILD_DIR/claude-prompt-server" "$RESOURCES_DIR/claude-prompt-server"
-chmod +x "$RESOURCES_DIR/claude-prompt-server"
+cp "$BUILD_DIR/flowgate-server" "$RESOURCES_DIR/flowgate-server"
+chmod +x "$RESOURCES_DIR/flowgate-server"
 
 # Copy hook binary to Resources (for Claude Code integration)
 cp "$BUILD_DIR/prompt-hook" "$RESOURCES_DIR/prompt-hook"
@@ -131,7 +134,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>ClaudePrompt</string>
+    <string>Flowgate</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>

@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var promptManager: PromptManager
     @ObservedObject var settingsManager: SettingsManager
+    let hotkeyManager: HotkeyManager?
     @State private var showingOtherDialog = false
     @State private var showingSettings = false
     @State private var selectedPromptForOther: Prompt?
@@ -43,7 +44,7 @@ struct ContentView: View {
             otherDialogView
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(settingsManager: settingsManager)
+            SettingsView(settingsManager: settingsManager, hotkeyManager: hotkeyManager)
         }
         .onAppear {
             setupKeyboardHandling()
@@ -53,6 +54,7 @@ struct ContentView: View {
             if selectedIndex >= newCount {
                 selectedIndex = max(0, newCount - 1)
             }
+            syncSelectedPromptID()
 
             // Return focus to previous app if enabled and prompts just became empty
             if settingsManager.settings.nativeOnly.returnFocusWhenEmpty &&
@@ -141,13 +143,19 @@ struct ContentView: View {
     private func selectNext() {
         if selectedIndex < filteredPrompts.count - 1 {
             selectedIndex += 1
+            syncSelectedPromptID()
         }
     }
 
     private func selectPrevious() {
         if selectedIndex > 0 {
             selectedIndex -= 1
+            syncSelectedPromptID()
         }
+    }
+
+    private func syncSelectedPromptID() {
+        promptManager.selectedPromptID = selectedPrompt?.id
     }
 
     private func acceptSelected() {
@@ -333,6 +341,7 @@ struct ContentView: View {
             .id(prompt.id)
             .onTapGesture {
                 selectedIndex = index
+                syncSelectedPromptID()
             }
         } else if prompt.toolName == "AskUserQuestion" {
             UserQuestionCardView(
@@ -351,6 +360,7 @@ struct ContentView: View {
             .id(prompt.id)
             .onTapGesture {
                 selectedIndex = index
+                syncSelectedPromptID()
             }
         } else {
             PromptCardView(
@@ -375,6 +385,7 @@ struct ContentView: View {
             .id(prompt.id)
             .onTapGesture {
                 selectedIndex = index
+                syncSelectedPromptID()
             }
         }
     }
@@ -434,7 +445,8 @@ struct ContentView_Previews: PreviewProvider {
         let ws = WebSocketClient()
         ContentView(
             promptManager: PromptManager(webSocket: ws),
-            settingsManager: SettingsManager(webSocket: ws)
+            settingsManager: SettingsManager(webSocket: ws),
+            hotkeyManager: HotkeyManager()
         )
     }
 }

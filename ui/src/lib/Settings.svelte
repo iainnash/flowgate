@@ -221,7 +221,7 @@
 
             <div class="form-section">
               <h4>Match Conditions</h4>
-              <p class="hint">Rules match if ANY condition is met (toolName OR category OR pattern)</p>
+              <p class="hint">Rules match when all specified conditions match (tool, category, and pattern).</p>
 
               <div class="form-group">
                 <label for="rule-tool">Specific Tool</label>
@@ -308,8 +308,8 @@
             </div>
 
             <p class="info-box">
-              Rules are evaluated in order. The first matching rule determines how a prompt is handled.
-              You can drag rules to reorder them.
+              When multiple rules match, Flowgate uses the most permissive action:
+              auto-accept, then accept-after, then manual.
             </p>
 
             {#if localRules.length === 0}

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Stream Deck client for Claude Prompt UI
+ * Stream Deck client for Flowgate
  * Connects to Go server via WebSocket
  */
 
@@ -13,11 +13,15 @@ import type { WsMessage, ClientMessage, Prompt, Decision } from './types.js';
 
 const SERVER_BASE_URL = process.env.SERVER_URL ?? 'ws://127.0.0.1:8888/ws';
 
-// Read authentication token from ~/.claude-prompt-ui/token
+// Read authentication token from ~/.flowgate/token, with a legacy fallback.
 function readToken(): string | null {
-  const tokenPath = join(homedir(), '.claude-prompt-ui', 'token');
-  if (!existsSync(tokenPath)) {
-    console.error('[Client] Token file not found at:', tokenPath);
+  const tokenPaths = [
+    join(homedir(), '.flowgate', 'token'),
+    join(homedir(), '.claude-prompt-ui', 'token'),
+  ];
+  const tokenPath = tokenPaths.find((path) => existsSync(path));
+  if (!tokenPath) {
+    console.error('[Client] Token file not found at:', tokenPaths[0]);
     console.error('[Client] Make sure the Go server is running to generate a token');
     return null;
   }

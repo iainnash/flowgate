@@ -143,7 +143,7 @@ struct ContentView_Previews: PreviewProvider {
 ## Settings Path Reference
 
 ### Local Settings (NativeOnly)
-Stored in: `~/.config/claude-prompt-ui/native-settings.json`
+Stored in: `~/.config/flowgate/native-settings.json`
 
 Access via: `settingsManager.settings.nativeOnly.*`
 

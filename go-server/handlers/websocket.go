@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/iain/claude-prompt-ui/models"
-	"github.com/iain/claude-prompt-ui/queue"
+	"github.com/iainnash/flowgate/go-server/models"
+	"github.com/iainnash/flowgate/go-server/queue"
 )
 
 // Hub manages WebSocket connections and broadcasts

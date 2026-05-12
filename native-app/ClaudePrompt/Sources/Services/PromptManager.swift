@@ -18,6 +18,7 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         .blue, .green, .orange, .purple, .pink, .cyan, .yellow, .red
     ]
     private var nextColorIndex = 0
+    var selectedPromptID: String?
 
     var promptCount: Int { prompts.count }
 
@@ -38,7 +39,13 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         }
     }
 
-    var currentPrompt: Prompt? { sortedPrompts.first }
+    var currentPrompt: Prompt? {
+        if let selectedPromptID,
+           let selectedPrompt = prompts.first(where: { $0.id == selectedPromptID }) {
+            return selectedPrompt
+        }
+        return sortedPrompts.first
+    }
 
     init(webSocket: WebSocketClient) {
         self.webSocket = webSocket
@@ -53,8 +60,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         webSocket.disconnect()
     }
 
-    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil) {
-        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason, updatedInput: updatedInput)
+    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil, additionalContext: String? = nil) {
+        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason, updatedInput: updatedInput, additionalContext: additionalContext)
     }
 
     func acceptCurrent() {
@@ -139,6 +146,9 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
 
     private func removePrompt(id: String) {
         prompts.removeAll { $0.id == id }
+        if selectedPromptID == id {
+            selectedPromptID = sortedPrompts.first?.id
+        }
     }
 
     private func updatePrompt(_ updatedPrompt: Prompt) {

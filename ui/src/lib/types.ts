@@ -1,4 +1,6 @@
 // Prompt acceptance types matching Go server
+export { default as protocolSchema } from '../../../shared/protocol.schema.json';
+
 export type PromptAcceptType = 'auto-accept' | 'accept-after' | 'manual';
 
 export interface Prompt {
@@ -91,9 +93,10 @@ export const DEFAULT_UI_PREFS: UIPreferences = {
 }
 
 export interface Decision {
-  decision: 'allow' | 'deny' | 'ask';
+  decision: 'allow' | 'deny' | 'ask' | 'defer';
   reason?: string;
   updatedInput?: Record<string, unknown>;
+  additionalContext?: string;
 }
 
 export type WsMessage =

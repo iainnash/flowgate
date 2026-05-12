@@ -94,6 +94,17 @@ struct HotkeyConfig: Codable {
         self.toggle = toggle
         self.pauseAll = pauseAll
     }
+
+    init(from decoder: Decoder) throws {
+        let defaults = HotkeyConfig()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        accept = try container.decodeIfPresent(String.self, forKey: .accept) ?? defaults.accept
+        deny = try container.decodeIfPresent(String.self, forKey: .deny) ?? defaults.deny
+        other = try container.decodeIfPresent(String.self, forKey: .other) ?? defaults.other
+        toggle = try container.decodeIfPresent(String.self, forKey: .toggle) ?? defaults.toggle
+        pauseAll = try container.decodeIfPresent(String.self, forKey: .pauseAll) ?? defaults.pauseAll
+    }
 }
 
 enum FocusStealMode: String, Codable, CaseIterable {
@@ -134,6 +145,18 @@ struct NativeOnlySettings: Codable {
         self.focusStealMode = focusStealMode
         self.returnFocusWhenEmpty = returnFocusWhenEmpty
     }
+
+    init(from decoder: Decoder) throws {
+        let defaults = NativeOnlySettings()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        floatingWindow = try container.decodeIfPresent(Bool.self, forKey: .floatingWindow) ?? defaults.floatingWindow
+        showInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showInMenuBar) ?? defaults.showInMenuBar
+        launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? defaults.launchAtLogin
+        globalHotkeys = try container.decodeIfPresent(HotkeyConfig.self, forKey: .globalHotkeys) ?? defaults.globalHotkeys
+        focusStealMode = try container.decodeIfPresent(FocusStealMode.self, forKey: .focusStealMode) ?? defaults.focusStealMode
+        returnFocusWhenEmpty = try container.decodeIfPresent(Bool.self, forKey: .returnFocusWhenEmpty) ?? defaults.returnFocusWhenEmpty
+    }
 }
 
 // Full app settings combining server settings + native-only settings
@@ -151,10 +174,34 @@ struct AppSettings: Codable {
 
     static let defaultSettings = AppSettings()
 
+    init(from decoder: Decoder) throws {
+        let defaults = AppSettings()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        server = try container.decodeIfPresent(ServerSettings.self, forKey: .server) ?? defaults.server
+        nativeOnly = try container.decodeIfPresent(NativeOnlySettings.self, forKey: .nativeOnly) ?? defaults.nativeOnly
+    }
+
     static var settingsURL: URL {
-        let configDir = FileManager.default.homeDirectoryForCurrentUser
+        let flowgateURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config")
+            .appendingPathComponent("flowgate")
+            .appendingPathComponent("native-settings.json")
+        if FileManager.default.fileExists(atPath: flowgateURL.path) {
+            return flowgateURL
+        }
+
+        let legacyURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config")
             .appendingPathComponent("claude-prompt-ui")
+            .appendingPathComponent("native-settings.json")
+        if FileManager.default.fileExists(atPath: legacyURL.path) {
+            return legacyURL
+        }
+
+        let configDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config")
+            .appendingPathComponent("flowgate")
         return configDir.appendingPathComponent("native-settings.json")
     }
 }

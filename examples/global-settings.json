@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/iain/code/ai-tools/claude-prompt-ui/hooks/run-hook.sh",
+            "command": "/Users/iain/code/flowgate/hooks/run-hook.sh",
             "timeout": 120
           }
         ]

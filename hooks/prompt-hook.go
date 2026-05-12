@@ -23,9 +23,10 @@ type HookInput struct {
 
 // ServerResponse is the response from the server
 type ServerResponse struct {
-	Decision     string                 `json:"decision"` // "allow" | "deny" | "ask"
-	Reason       *string                `json:"reason,omitempty"`
-	UpdatedInput map[string]interface{} `json:"updatedInput,omitempty"`
+	Decision          string                 `json:"decision"` // "allow" | "deny" | "ask" | "defer"
+	Reason            *string                `json:"reason,omitempty"`
+	UpdatedInput      map[string]interface{} `json:"updatedInput,omitempty"`
+	AdditionalContext *string                `json:"additionalContext,omitempty"`
 }
 
 // HookOutput is the output that Claude Code expects
@@ -34,37 +35,45 @@ type HookOutput struct {
 }
 
 type HookSpecificOutput struct {
-	HookEventName             string                 `json:"hookEventName"`
-	PermissionDecision        string                 `json:"permissionDecision"` // "allow" | "deny" | "ask"
-	PermissionDecisionReason  *string                `json:"permissionDecisionReason,omitempty"`
-	UpdatedInput              map[string]interface{} `json:"updatedInput,omitempty"`
+	HookEventName            string                 `json:"hookEventName"`
+	PermissionDecision       string                 `json:"permissionDecision"` // "allow" | "deny" | "ask" | "defer"
+	PermissionDecisionReason *string                `json:"permissionDecisionReason,omitempty"`
+	UpdatedInput             map[string]interface{} `json:"updatedInput,omitempty"`
+	AdditionalContext        *string                `json:"additionalContext,omitempty"`
 }
 
 var (
-	serverURL = getEnv("CLAUDE_PROMPT_UI_SERVER", "http://127.0.0.1:8888")
-	timeoutMS = getEnvInt("CLAUDE_PROMPT_UI_TIMEOUT", 120000)
+	serverURL = getEnvWithLegacy("FLOWGATE_SERVER", "CLAUDE_PROMPT_UI_SERVER", "http://127.0.0.1:8888")
+	timeoutMS = getEnvIntWithLegacy("FLOWGATE_TIMEOUT", "CLAUDE_PROMPT_UI_TIMEOUT", 120000)
 )
 
 // readTokenFromFile reads auth token from the app directory
 func readTokenFromFile() string {
 	// Try environment variable first
+	if token := os.Getenv("FLOWGATE_TOKEN"); token != "" {
+		return token
+	}
 	if token := os.Getenv("CLAUDE_PROMPT_UI_TOKEN"); token != "" {
 		return token
 	}
 
-	// Read from ~/.claude-prompt-ui/token
+	// Read from ~/.flowgate/token, falling back to the pre-Flowgate path.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
 
-	tokenPath := filepath.Join(homeDir, ".claude-prompt-ui", "token")
-	tokenBytes, err := os.ReadFile(tokenPath)
-	if err != nil {
-		return ""
+	for _, tokenPath := range []string{
+		filepath.Join(homeDir, ".flowgate", "token"),
+		filepath.Join(homeDir, ".claude-prompt-ui", "token"),
+	} {
+		tokenBytes, err := os.ReadFile(tokenPath)
+		if err == nil {
+			return strings.TrimSpace(string(tokenBytes))
+		}
 	}
 
-	return strings.TrimSpace(string(tokenBytes))
+	return ""
 }
 
 func main() {
@@ -162,6 +171,7 @@ func outputDecision(result *ServerResponse) {
 				HookEventName:      "PreToolUse",
 				PermissionDecision: "allow",
 				UpdatedInput:       result.UpdatedInput,
+				AdditionalContext:  result.AdditionalContext,
 			},
 		})
 	case "deny":
@@ -174,10 +184,32 @@ func outputDecision(result *ServerResponse) {
 				HookEventName:            "PreToolUse",
 				PermissionDecision:       "deny",
 				PermissionDecisionReason: &reason,
+				AdditionalContext:        result.AdditionalContext,
 			},
 		})
-	default: // "ask"
-		fallbackToTerminal("User chose to decide in terminal")
+	case "defer":
+		output(HookOutput{
+			HookSpecificOutput: HookSpecificOutput{
+				HookEventName:      "PreToolUse",
+				PermissionDecision: "defer",
+			},
+		})
+	case "ask":
+		reason := "User chose to decide in terminal"
+		if result.Reason != nil {
+			reason = *result.Reason
+		}
+		output(HookOutput{
+			HookSpecificOutput: HookSpecificOutput{
+				HookEventName:            "PreToolUse",
+				PermissionDecision:       "ask",
+				PermissionDecisionReason: &reason,
+				UpdatedInput:             result.UpdatedInput,
+				AdditionalContext:        result.AdditionalContext,
+			},
+		})
+	default:
+		fallbackToTerminal("Invalid decision from Flowgate server")
 	}
 }
 
@@ -212,6 +244,13 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+func getEnvWithLegacy(key, legacyKey, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return getEnv(legacyKey, defaultValue)
+}
+
 func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		var result int
@@ -220,4 +259,14 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+func getEnvIntWithLegacy(key, legacyKey string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		var result int
+		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return getEnvInt(legacyKey, defaultValue)
 }

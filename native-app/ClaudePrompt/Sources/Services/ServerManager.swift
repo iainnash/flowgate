@@ -52,6 +52,10 @@ class ServerManager: ObservableObject {
     /// Find the server binary - checks environment variable first, then app bundle
     private func findServerBinary() -> String? {
         // 1. Check environment variable override
+        if let envPath = ProcessInfo.processInfo.environment["FLOWGATE_SERVER_PATH"],
+           FileManager.default.fileExists(atPath: envPath) {
+            return envPath
+        }
         if let envPath = ProcessInfo.processInfo.environment["CLAUDE_PROMPT_SERVER_PATH"],
            FileManager.default.fileExists(atPath: envPath) {
             return envPath
@@ -59,9 +63,11 @@ class ServerManager: ObservableObject {
 
         // 2. Check app bundle Resources
         if let resourcePath = Bundle.main.resourcePath {
-            let bundlePath = (resourcePath as NSString).appendingPathComponent("claude-prompt-server")
-            if FileManager.default.fileExists(atPath: bundlePath) {
-                return bundlePath
+            for binaryName in ["flowgate-server", "claude-prompt-server"] {
+                let bundlePath = (resourcePath as NSString).appendingPathComponent(binaryName)
+                if FileManager.default.fileExists(atPath: bundlePath) {
+                    return bundlePath
+                }
             }
         }
 
@@ -71,7 +77,7 @@ class ServerManager: ObservableObject {
     private func startServerProcess() {
         // Find server binary
         guard let serverPath = findServerBinary() else {
-            serverError = "Server binary not found. Set CLAUDE_PROMPT_SERVER_PATH or use the bundled app."
+            serverError = "Server binary not found. Set FLOWGATE_SERVER_PATH or use the bundled app."
             appendLog("[\(Self.timestamp)] Error: Server binary not found\n")
             return
         }

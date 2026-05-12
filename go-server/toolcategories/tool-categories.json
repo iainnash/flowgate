@@ -1,0 +1,49 @@
+{
+  "mcpPrefix": "mcp__",
+  "categoryOrder": [
+    "read",
+    "write",
+    "execute",
+    "task",
+    "web",
+    "interactive"
+  ],
+  "categories": {
+    "read": [
+      "Read",
+      "Glob",
+      "Grep",
+      "ListMcpResourcesTool",
+      "ReadMcpResourceTool",
+      "ToolSearch"
+    ],
+    "write": [
+      "Edit",
+      "Write",
+      "NotebookEdit"
+    ],
+    "execute": [
+      "Bash",
+      "KillShell",
+      "Skill"
+    ],
+    "task": [
+      "Task",
+      "TaskList",
+      "TaskGet",
+      "TaskOutput",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskStop"
+    ],
+    "web": [
+      "WebFetch",
+      "WebSearch"
+    ],
+    "interactive": [
+      "AskUserQuestion",
+      "ExitPlanMode",
+      "EnterPlanMode"
+    ]
+  }
+}

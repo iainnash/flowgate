@@ -2,7 +2,7 @@
 
 ## Summary
 
-Token-based authentication has been successfully implemented across the Claude Prompt UI to prevent unauthorized access from other processes on the same machine.
+Token-based authentication has been successfully implemented across Flowgate to prevent unauthorized access from other processes on the same machine.
 
 ## What Was Implemented
 
@@ -10,7 +10,7 @@ Token-based authentication has been successfully implemented across the Claude P
 
 1. **Token Generation** (`go-server/main.go`)
    - Automatically generates a secure 32-byte token on first run
-   - Saves to `~/.claude-prompt-ui/token` with 0600 permissions (owner-only access)
+   - Saves to `~/.flowgate/token` with 0600 permissions (owner-only access)
    - Uses cryptographically secure random number generation
    - Token is base64-encoded for safe transmission
 
@@ -27,8 +27,8 @@ Token-based authentication has been successfully implemented across the Claude P
 ### Phase 2: Client Updates ✅
 
 1. **Hook** (`hooks/prompt-hook.go`)
-   - Reads token from `~/.claude-prompt-ui/token`
-   - Falls back to `CLAUDE_PROMPT_UI_TOKEN` environment variable
+   - Reads token from `~/.flowgate/token`
+   - Falls back to `FLOWGATE_TOKEN` environment variable
    - Sends token via `Authorization: Bearer <token>` header
 
 2. **Web UI** (`ui/src/lib/stores.ts`)
@@ -53,7 +53,7 @@ Token-based authentication has been successfully implemented across the Claude P
 
 ✅ **Token Generation**
 - Server generates token on first run
-- Token file created at `~/.claude-prompt-ui/token`
+- Token file created at `~/.flowgate/token`
 - File permissions: 0600 (owner read/write only)
 - Token size: 44 bytes (base64-encoded 32-byte value)
 
@@ -67,13 +67,13 @@ Token-based authentication has been successfully implemented across the Claude P
 ### First Launch
 1. User launches desktop app
 2. ServerManager starts embedded Go server
-3. Server checks for token at `~/.claude-prompt-ui/token`
+3. Server checks for token at `~/.flowgate/token`
 4. If not found, generates new secure token
 5. Saves token with 0600 permissions
 
 ### Hook Usage
 1. Claude Code triggers hook
-2. Hook reads token from `~/.claude-prompt-ui/token`
+2. Hook reads token from `~/.flowgate/token`
 3. Hook sends request with `Authorization: Bearer <token>`
 4. Server validates token and processes request
 
@@ -135,15 +135,17 @@ Token-based authentication has been successfully implemented across the Claude P
 - `VERBOSE` - Enable verbose logging
 
 ### Hook
-- `CLAUDE_PROMPT_UI_SERVER` - Server URL (default: http://127.0.0.1:8888)
-- `CLAUDE_PROMPT_UI_TIMEOUT` - Timeout in ms (default: 120000)
-- `CLAUDE_PROMPT_UI_TOKEN` - Auth token (auto-read from file if not set)
+- `FLOWGATE_SERVER` - Server URL (default: http://127.0.0.1:8888)
+- `FLOWGATE_TIMEOUT` - Timeout in ms (default: 120000)
+- `FLOWGATE_TOKEN` - Auth token (auto-read from file if not set)
+
+Legacy `CLAUDE_PROMPT_UI_*` variables are still accepted as fallbacks for one release.
 
 ## Next Steps
 
 ### Required for Deployment
 1. **Build macOS App**: Package with embedded server binary
-2. **Bundle Server**: Include `claude-prompt-server` in app bundle
+2. **Bundle Server**: Include `flowgate-server` in app bundle
 3. **Test End-to-End**: Full flow from app launch to hook execution
 
 ### Optional Enhancements
@@ -157,18 +159,18 @@ Token-based authentication has been successfully implemented across the Claude P
 
 ### "Cannot read authentication token"
 1. Ensure desktop app has been launched at least once
-2. Check token exists: `ls -la ~/.claude-prompt-ui/token`
+2. Check token exists: `ls -la ~/.flowgate/token`
 3. Check permissions: Should be `-rw-------` (0600)
 
 ### "Authentication failed"
-1. Delete token: `rm ~/.claude-prompt-ui/token`
+1. Delete token: `rm ~/.flowgate/token`
 2. Restart desktop app (generates new token)
 3. Verify all clients use same token file
 
 ### Hook not working
-1. Check token exists: `cat ~/.claude-prompt-ui/token`
+1. Check token exists: `cat ~/.flowgate/token`
 2. Test server is running: `curl http://localhost:8888/api/health`
-3. Test with token: `curl -H "Authorization: Bearer $(cat ~/.claude-prompt-ui/token)" http://localhost:8888/api/prompt`
+3. Test with token: `curl -H "Authorization: Bearer $(cat ~/.flowgate/token)" http://localhost:8888/api/prompt`
 
 ## Architecture Diagram
 
@@ -189,7 +191,7 @@ Token-based authentication has been successfully implemented across the Claude P
 │     Go Server (Embedded)            │   │ Web UI (Browser)          │
 │  ┌──────────────────────────────┐  │   │  ┌────────────────────┐  │
 │  │ ensureTokenExists():         │  │   │  │ Read token from:   │  │
-│  │ - Check ~/.claude-prompt-ui/ │  │   │  │ 1. URL param       │  │
+│  │ - Check ~/.flowgate/token    │  │   │  │ 1. URL param       │  │
 │  │ - Generate if missing        │  │   │  │ 2. localStorage    │  │
 │  │ - Save with 0600 perms       │  │   │  └────────────────────┘  │
 │  └──────────────────────────────┘  │   │            │              │
@@ -210,16 +212,15 @@ Token-based authentication has been successfully implemented across the Claude P
 │  Claude Code Hook (Go)               │  │
 │  ┌───────────────────────────────┐  │  │
 │  │ readTokenFromFile():          │  │  │
-│  │ 1. Check CLAUDE_PROMPT_UI_    │  │  │
-│  │    TOKEN env var              │  │  │
-│  │ 2. Read ~/.claude-prompt-ui/  │  │  │
-│  │    token                      │  │  │
+│  │ 1. Check FLOWGATE_TOKEN       │  │  │
+│  │    env var                    │  │  │
+│  │ 2. Read ~/.flowgate/token     │  │  │
 │  │ 3. Send in Authorization      │  │  │
 │  │    header                     │  │  │
 │  └───────────────────────────────┘  │  │
 └──────────────────────────────────────┘  │
                                           │
-         Token File: ~/.claude-prompt-ui/token
+         Token File: ~/.flowgate/token
          Permissions: 0600 (owner-only)
          Format: base64-encoded 32 random bytes
 ```

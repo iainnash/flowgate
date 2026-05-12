@@ -1,3 +1,3 @@
-module github.com/iain/claude-prompt-ui/hooks
+module github.com/iainnash/flowgate/hooks
 
 go 1.21

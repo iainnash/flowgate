@@ -147,9 +147,9 @@ make build
 ```
 
 Environment variables:
-- `CLAUDE_PROMPT_UI_SERVER`: Server URL (default: http://127.0.0.1:8888)
-- `CLAUDE_PROMPT_UI_TIMEOUT`: Timeout in ms (default: 120000)
-- `CLAUDE_PROMPT_UI_TOKEN`: Auth token (auto-read from `~/.claude-prompt-ui/token`)
+- `FLOWGATE_SERVER`: Server URL (default: http://127.0.0.1:8888)
+- `FLOWGATE_TIMEOUT`: Timeout in ms (default: 120000)
+- `FLOWGATE_TOKEN`: Auth token (auto-read from `~/.flowgate/token`)
 
 ### Native macOS App
 
@@ -169,7 +169,7 @@ SwiftUI menu bar application with embedded Go server.
 ```bash
 cd native-app/ClaudePrompt
 swift build
-.build/debug/ClaudePrompt
+.build/debug/Flowgate
 ```
 
 **Build production DMG:**
@@ -358,5 +358,5 @@ Client messages:
 ### WebSocket disconnecting
 
 1. Check server health: `curl http://localhost:8888/api/health`
-2. Check authentication token exists: `cat ~/.claude-prompt-ui/token`
+2. Check authentication token exists: `cat ~/.flowgate/token`
 3. Restart the app to regenerate token if needed

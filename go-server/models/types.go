@@ -26,8 +26,8 @@ type Prompt struct {
 	CWD           string                 `json:"cwd"`
 	CreatedAt     int64                  `json:"createdAt"` // milliseconds
 	AcceptType    PromptAcceptType       `json:"acceptType"`
-	AutoAcceptIn  *int                   `json:"autoAcceptIn,omitempty"`  // seconds
-	AutoAcceptAt  *int64                 `json:"autoAcceptAt,omitempty"`  // milliseconds
+	AutoAcceptIn  *int                   `json:"autoAcceptIn,omitempty"` // seconds
+	AutoAcceptAt  *int64                 `json:"autoAcceptAt,omitempty"` // milliseconds
 }
 
 // HookInput is the input from Claude Code hook
@@ -62,11 +62,12 @@ func (h *HookInput) Normalize() {
 	}
 }
 
-// Decision represents a resolution decision
+// Decision represents a PreToolUse resolution decision.
 type Decision struct {
-	Decision     string                 `json:"decision"` // "allow" | "deny" | "ask"
-	Reason       *string                `json:"reason,omitempty"`
-	UpdatedInput map[string]interface{} `json:"updatedInput,omitempty"`
+	Decision          string                 `json:"decision"` // "allow" | "deny" | "ask" | "defer"
+	Reason            *string                `json:"reason,omitempty"`
+	UpdatedInput      map[string]interface{} `json:"updatedInput,omitempty"`
+	AdditionalContext *string                `json:"additionalContext,omitempty"`
 }
 
 // RuleAction defines what action to take for a prompt
@@ -139,7 +140,7 @@ type WSSettingsUpdated struct {
 
 // Helper to check if a decision is valid
 func (d *Decision) IsValid() bool {
-	return d.Decision == "allow" || d.Decision == "deny" || d.Decision == "ask"
+	return d.Decision == "allow" || d.Decision == "deny" || d.Decision == "ask" || d.Decision == "defer"
 }
 
 // Helper to create default settings
@@ -191,6 +192,15 @@ func GetSettingsPath() string {
 	if err != nil {
 		return ""
 	}
+	return filepath.Join(homeDir, ".flowgate", "settings.json")
+}
+
+// GetLegacySettingsPath returns the pre-Flowgate settings path.
+func GetLegacySettingsPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
 	return filepath.Join(homeDir, ".claude-prompt-ui", "settings.json")
 }
 
@@ -203,8 +213,15 @@ func LoadSettings() *Settings {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File doesn't exist or can't be read, return defaults
-		return DefaultSettings()
+		legacyPath := GetLegacySettingsPath()
+		if legacyPath == "" {
+			return DefaultSettings()
+		}
+		data, err = os.ReadFile(legacyPath)
+		if err != nil {
+			// File doesn't exist or can't be read, return defaults
+			return DefaultSettings()
+		}
 	}
 
 	var settings Settings

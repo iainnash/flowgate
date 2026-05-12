@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 
-// Mock Tone.js to avoid ESM issues in tests
 vi.mock('tone', () => ({
   start: vi.fn().mockResolvedValue(undefined),
   now: vi.fn().mockReturnValue(0),
@@ -16,317 +15,219 @@ vi.mock('tone', () => ({
     triggerAttackRelease: vi.fn(),
   })),
 }));
+
 import {
-  prompts,
-  settings,
   addPrompt,
-  removePrompt,
+  autoAccepted,
+  connectWebSocket,
+  connected,
+  getPromptDisplayIndex,
   getSessionColor,
-  findMatchingRule,
-  ruleMatchesTool,
+  getToolCategory,
+  globalPaused,
+  prompts,
+  removePrompt,
+  settings,
+  uiPrefs,
 } from './stores';
-import type { Prompt, PermissionRule, Settings } from './types';
+import type { Prompt, Settings, UIPreferences } from './types';
+
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  static instances: MockWebSocket[] = [];
+
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  readyState = MockWebSocket.OPEN;
+  sent: string[] = [];
+
+  constructor(public url: string) {
+    MockWebSocket.instances.push(this);
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.();
+  }
+
+  emit(message: unknown): void {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+}
+
+function createPrompt(overrides: Partial<Prompt> = {}): Prompt {
+  return {
+    id: 'prompt-1',
+    sessionId: 'session-1',
+    toolName: 'Bash',
+    toolInput: { command: 'pnpm test' },
+    hookEventName: 'PreToolUse',
+    cwd: '/Users/iain/code/flowgate',
+    createdAt: 1_700_000_000_000,
+    acceptType: 'manual',
+    ...overrides,
+  };
+}
+
+function currentSettings(overrides: Partial<Settings> = {}): Settings {
+  return {
+    rules: [],
+    native: {
+      showAutoAccept: true,
+      enableAnimations: true,
+    },
+    ...overrides,
+  };
+}
 
 describe('stores', () => {
   beforeEach(() => {
-    prompts.set([]);
-    settings.set({
-      rules: [
-        {
-          id: '1',
-          name: 'Read operations',
-          matchType: 'category',
-          matchValue: 'read',
-          action: { type: 'accept-after', seconds: 3 },
-          enabled: true,
-        },
-        {
-          id: '2',
-          name: 'Everything else',
-          matchType: 'all',
-          matchValue: '*',
-          action: { type: 'require-verify' },
-          enabled: true,
-        },
-      ],
-      projects: [],
-    });
     localStorage.clear();
+    vi.restoreAllMocks();
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    MockWebSocket.instances = [];
+
+    prompts.set([]);
+    autoAccepted.set(new Set());
+    connected.set(false);
+    globalPaused.set(false);
+    settings.set(currentSettings());
+    uiPrefs.set({ theme: 'dark', volume: 50 });
   });
 
-  describe('prompts store', () => {
-    const createPrompt = (id: string): Prompt => ({
-      id,
-      sessionId: 'session-1',
-      toolName: 'Bash',
-      toolInput: { command: 'ls' },
-      hookEventName: 'PreToolUse',
-      cwd: '/home/user',
-      createdAt: Date.now(),
+  describe('prompt state', () => {
+    it('adds and removes prompts by id', () => {
+      addPrompt(createPrompt({ id: 'prompt-1' }));
+      addPrompt(createPrompt({ id: 'prompt-2', toolName: 'Read' }));
+
+      expect(get(prompts).map((prompt) => prompt.id)).toEqual(['prompt-1', 'prompt-2']);
+
+      removePrompt('prompt-1');
+
+      expect(get(prompts).map((prompt) => prompt.id)).toEqual(['prompt-2']);
     });
 
-    it('should add prompt', () => {
-      addPrompt(createPrompt('1'));
+    it('ignores removal of unknown prompts', () => {
+      addPrompt(createPrompt());
+      removePrompt('missing');
+
       expect(get(prompts)).toHaveLength(1);
     });
 
-    it('should add multiple prompts', () => {
-      addPrompt(createPrompt('1'));
-      addPrompt(createPrompt('2'));
-      expect(get(prompts)).toHaveLength(2);
-    });
+    it('returns display positions for connected hardware controls', () => {
+      const allPrompts = [
+        createPrompt({ id: 'prompt-1' }),
+        createPrompt({ id: 'prompt-2' }),
+        createPrompt({ id: 'prompt-3' }),
+        createPrompt({ id: 'prompt-4' }),
+        createPrompt({ id: 'prompt-5' }),
+      ];
 
-    it('should remove prompt by id', () => {
-      addPrompt(createPrompt('1'));
-      addPrompt(createPrompt('2'));
-      removePrompt('1');
-      expect(get(prompts)).toHaveLength(1);
-      expect(get(prompts)[0].id).toBe('2');
-    });
-
-    it('should handle removing non-existent prompt', () => {
-      addPrompt(createPrompt('1'));
-      removePrompt('unknown');
-      expect(get(prompts)).toHaveLength(1);
+      expect(getPromptDisplayIndex('prompt-1', allPrompts)).toBe('1');
+      expect(getPromptDisplayIndex('prompt-4', allPrompts)).toBe('4');
+      expect(getPromptDisplayIndex('prompt-5', allPrompts)).toBe('5+');
+      expect(getPromptDisplayIndex('missing', allPrompts)).toBeUndefined();
     });
   });
 
-  describe('settings store', () => {
-    it('should have rules array', () => {
-      const s = get(settings);
-      expect(s.rules).toBeDefined();
-      expect(Array.isArray(s.rules)).toBe(true);
-    });
+  describe('settings and preferences', () => {
+    it('uses the current settings shape', () => {
+      const newSettings: Settings = currentSettings({
+        rules: [
+          {
+            name: 'Read files after a delay',
+            toolName: 'Read',
+            category: 'read',
+            action: { type: 'accept-after', seconds: 5 },
+            enabled: true,
+            matchCount: 0,
+          },
+        ],
+      });
 
-    it('should have projects array', () => {
-      const s = get(settings);
-      expect(s.projects).toBeDefined();
-      expect(Array.isArray(s.projects)).toBe(true);
-    });
-
-    it('should persist to localStorage', () => {
-      const newSettings: Settings = {
-        rules: [{
-          id: 'test',
-          name: 'Test',
-          matchType: 'all',
-          matchValue: '*',
-          action: { type: 'require-verify' },
-          enabled: true,
-        }],
-        projects: [],
-      };
       settings.set(newSettings);
-      const stored = JSON.parse(
-        localStorage.getItem('claude-prompt-ui-settings') || '{}'
-      );
-      expect(stored.rules).toHaveLength(1);
-      expect(stored.rules[0].name).toBe('Test');
+
+      expect(get(settings)).toEqual(newSettings);
+    });
+
+    it('persists UI preferences locally without mixing them into server settings', () => {
+      const prefs: UIPreferences = { theme: 'light', volume: 25 };
+
+      uiPrefs.set(prefs);
+
+      expect(JSON.parse(localStorage.getItem('flowgate-prefs') ?? '{}')).toEqual(prefs);
+      expect(get(settings)).toEqual(currentSettings());
     });
   });
 
-  describe('ruleMatchesTool', () => {
-    it('should match by category', () => {
-      const rule: PermissionRule = {
-        id: '1',
-        name: 'Read',
-        matchType: 'category',
-        matchValue: 'read',
-        action: { type: 'auto-accept' },
-        enabled: true,
-      };
-      expect(ruleMatchesTool(rule, 'Read')).toBe(true);
-      expect(ruleMatchesTool(rule, 'Glob')).toBe(true);
-      expect(ruleMatchesTool(rule, 'Bash')).toBe(false);
+  describe('tool metadata', () => {
+    it('categorizes known and MCP tools', () => {
+      expect(getToolCategory('Read')).toBe('read');
+      expect(getToolCategory('Edit')).toBe('write');
+      expect(getToolCategory('Bash')).toBe('execute');
+      expect(getToolCategory('AskUserQuestion')).toBe('interactive');
+      expect(getToolCategory('mcp__github__search')).toBe('mcp');
+      expect(getToolCategory('SomethingNew')).toBe('other');
     });
 
-    it('should match by specific tool', () => {
-      const rule: PermissionRule = {
-        id: '1',
-        name: 'Bash only',
-        matchType: 'tool',
-        matchValue: 'Bash',
-        action: { type: 'auto-accept' },
-        enabled: true,
-      };
-      expect(ruleMatchesTool(rule, 'Bash')).toBe(true);
-      expect(ruleMatchesTool(rule, 'Read')).toBe(false);
-    });
+    it('returns stable colors for the same session', () => {
+      const first = getSessionColor('session-a');
+      const second = getSessionColor('session-a');
 
-    it('should match by pattern', () => {
-      const rule: PermissionRule = {
-        id: '1',
-        name: 'MCP tools',
-        matchType: 'pattern',
-        matchValue: 'mcp__.*',
-        action: { type: 'auto-accept' },
-        enabled: true,
-      };
-      expect(ruleMatchesTool(rule, 'mcp__slack__send')).toBe(true);
-      expect(ruleMatchesTool(rule, 'Bash')).toBe(false);
-    });
-
-    it('should match all tools with "all" type', () => {
-      const rule: PermissionRule = {
-        id: '1',
-        name: 'Catch all',
-        matchType: 'all',
-        matchValue: '*',
-        action: { type: 'require-verify' },
-        enabled: true,
-      };
-      expect(ruleMatchesTool(rule, 'Bash')).toBe(true);
-      expect(ruleMatchesTool(rule, 'Read')).toBe(true);
-      expect(ruleMatchesTool(rule, 'mcp__anything')).toBe(true);
-    });
-
-    it('should not match disabled rules', () => {
-      const rule: PermissionRule = {
-        id: '1',
-        name: 'Disabled',
-        matchType: 'all',
-        matchValue: '*',
-        action: { type: 'auto-accept' },
-        enabled: false,
-      };
-      expect(ruleMatchesTool(rule, 'Bash')).toBe(false);
+      expect(first).toBe(second);
+      expect(first).toMatch(/^#[0-9a-f]{6}$/i);
     });
   });
 
-  describe('findMatchingRule', () => {
-    it('should find first matching rule', () => {
-      const s: Settings = {
+  describe('WebSocket messages', () => {
+    it('updates stores from current server messages', () => {
+      localStorage.setItem('flowgate-token', 'test-token');
+
+      connectWebSocket();
+      const socket = MockWebSocket.instances[0];
+      socket.onopen?.();
+
+      expect(socket.url).toBe('ws://localhost:3000/ws?token=test-token');
+      expect(get(connected)).toBe(true);
+
+      const prompt = createPrompt({ id: 'prompt-from-server', toolName: 'Read' });
+      socket.emit({ type: 'prompt:new', prompt });
+      expect(get(prompts)).toEqual([prompt]);
+
+      socket.emit({
+        type: 'prompt:updated',
+        prompt: { ...prompt, acceptType: 'accept-after', autoAcceptIn: 10 },
+      });
+      expect(get(prompts)[0]).toMatchObject({ acceptType: 'accept-after', autoAcceptIn: 10 });
+
+      socket.emit({ type: 'pause:changed', isPaused: true });
+      expect(get(globalPaused)).toBe(true);
+
+      const serverSettings = currentSettings({
         rules: [
           {
-            id: '1',
-            name: 'Read',
-            matchType: 'category',
-            matchValue: 'read',
+            name: 'Auto-accept reads',
+            toolName: 'Read',
             action: { type: 'auto-accept' },
             enabled: true,
-          },
-          {
-            id: '2',
-            name: 'Catch all',
-            matchType: 'all',
-            matchValue: '*',
-            action: { type: 'require-verify' },
-            enabled: true,
+            matchCount: 2,
           },
         ],
-        projects: [],
-      };
-      const rule = findMatchingRule(s, 'Read', '/home/user');
-      expect(rule?.id).toBe('1');
-    });
+      });
+      socket.emit({ type: 'settings:updated', settings: serverSettings });
+      expect(get(settings)).toEqual(serverSettings);
 
-    it('should fall back to catch-all rule', () => {
-      const s: Settings = {
-        rules: [
-          {
-            id: '1',
-            name: 'Read',
-            matchType: 'category',
-            matchValue: 'read',
-            action: { type: 'auto-accept' },
-            enabled: true,
-          },
-          {
-            id: '2',
-            name: 'Catch all',
-            matchType: 'all',
-            matchValue: '*',
-            action: { type: 'require-verify' },
-            enabled: true,
-          },
-        ],
-        projects: [],
-      };
-      const rule = findMatchingRule(s, 'Bash', '/home/user');
-      expect(rule?.id).toBe('2');
-    });
-
-    it('should match project-specific rules first', () => {
-      const s: Settings = {
-        rules: [
-          {
-            id: '1',
-            name: 'Global catch-all',
-            matchType: 'all',
-            matchValue: '*',
-            action: { type: 'require-verify' },
-            enabled: true,
-          },
-        ],
-        projects: [
-          {
-            projectPath: '/home/user/myproject',
-            rules: [
-              {
-                id: '2',
-                name: 'Project auto-accept',
-                matchType: 'all',
-                matchValue: '*',
-                action: { type: 'auto-accept' },
-                enabled: true,
-              },
-            ],
-          },
-        ],
-      };
-      const rule = findMatchingRule(s, 'Bash', '/home/user/myproject/src');
-      expect(rule?.id).toBe('2');
-    });
-
-    it('should fall back to global rules when no project matches', () => {
-      const s: Settings = {
-        rules: [
-          {
-            id: '1',
-            name: 'Global catch-all',
-            matchType: 'all',
-            matchValue: '*',
-            action: { type: 'require-verify' },
-            enabled: true,
-          },
-        ],
-        projects: [
-          {
-            projectPath: '/other/path',
-            rules: [
-              {
-                id: '2',
-                name: 'Project auto-accept',
-                matchType: 'all',
-                matchValue: '*',
-                action: { type: 'auto-accept' },
-                enabled: true,
-              },
-            ],
-          },
-        ],
-      };
-      const rule = findMatchingRule(s, 'Bash', '/home/user/different');
-      expect(rule?.id).toBe('1');
-    });
-  });
-
-  describe('getSessionColor', () => {
-    it('should return consistent color for same session', () => {
-      const color1 = getSessionColor('session-a');
-      const color2 = getSessionColor('session-a');
-      expect(color1).toBe(color2);
-    });
-
-    it('should return different colors for different sessions', () => {
-      const color1 = getSessionColor('session-a');
-      const color2 = getSessionColor('session-b');
-      expect(color1).not.toBe(color2);
-    });
-
-    it('should return valid hex color', () => {
-      const color = getSessionColor('test');
-      expect(color).toMatch(/^#[0-9a-f]{6}$/i);
+      socket.emit({ type: 'prompt:resolved', id: 'prompt-from-server', autoAccepted: false });
+      expect(get(prompts)).toEqual([]);
     });
   });
 });

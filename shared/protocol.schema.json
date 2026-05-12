@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowgate.local/schemas/protocol.schema.json",
+  "title": "Flowgate Protocol",
+  "type": "object",
+  "$defs": {
+    "jsonValue": {
+      "description": "Arbitrary JSON value used for tool inputs and updated inputs."
+    },
+    "decisionValue": {
+      "type": "string",
+      "enum": ["allow", "deny", "ask", "defer"]
+    },
+    "hookEventName": {
+      "type": "string",
+      "enum": [
+        "SessionStart",
+        "Setup",
+        "InstructionsLoaded",
+        "UserPromptSubmit",
+        "UserPromptExpansion",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PostToolBatch",
+        "PermissionDenied",
+        "Notification",
+        "SubagentStart",
+        "SubagentStop",
+        "TaskCreated",
+        "TaskCompleted",
+        "Stop",
+        "StopFailure",
+        "TeammateIdle",
+        "ConfigChange",
+        "CwdChanged",
+        "FileChanged",
+        "WorktreeCreate",
+        "WorktreeRemove",
+        "PreCompact",
+        "PostCompact",
+        "SessionEnd",
+        "Elicitation",
+        "ElicitationResult"
+      ]
+    },
+    "promptAcceptType": {
+      "type": "string",
+      "enum": ["auto-accept", "accept-after", "manual"]
+    },
+    "toolCategory": {
+      "type": "string",
+      "enum": ["read", "write", "execute", "task", "web", "interactive", "mcp", "other"]
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sessionId",
+        "toolName",
+        "toolInput",
+        "hookEventName",
+        "cwd",
+        "createdAt",
+        "acceptType"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "toolInput": { "$ref": "#/$defs/jsonValue" },
+        "hookEventName": { "$ref": "#/$defs/hookEventName" },
+        "cwd": { "type": "string" },
+        "createdAt": { "type": "integer", "description": "Unix timestamp in milliseconds." },
+        "acceptType": { "$ref": "#/$defs/promptAcceptType" },
+        "autoAcceptIn": { "type": "integer", "minimum": 1, "description": "Seconds until auto-accept." },
+        "autoAcceptAt": { "type": "integer", "description": "Unix timestamp in milliseconds." }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision"],
+      "properties": {
+        "decision": { "$ref": "#/$defs/decisionValue" },
+        "reason": { "type": "string" },
+        "updatedInput": { "$ref": "#/$defs/jsonValue" },
+        "additionalContext": { "type": "string" }
+      }
+    },
+    "ruleAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["manual", "auto-accept", "accept-after"]
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "toolName", "action", "enabled", "matchCount"],
+      "properties": {
+        "name": { "type": "string" },
+        "toolName": { "type": "string" },
+        "category": { "$ref": "#/$defs/toolCategory" },
+        "pattern": { "type": "string" },
+        "action": { "$ref": "#/$defs/ruleAction" },
+        "enabled": { "type": "boolean" },
+        "matchCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "nativeSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["showAutoAccept", "enableAnimations"],
+      "properties": {
+        "showAutoAccept": { "type": "boolean" },
+        "enableAnimations": { "type": "boolean" }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules", "native"],
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "native": { "$ref": "#/$defs/nativeSettings" }
+      }
+    },
+    "deviceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "connected"],
+      "properties": {
+        "name": { "type": "string" },
+        "connected": { "type": "boolean" },
+        "deviceModel": { "type": "string" }
+      }
+    },
+    "devicesResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["devices", "hasConnectedDevice"],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/deviceStatus" }
+        },
+        "hasConnectedDevice": { "type": "boolean" }
+      }
+    },
+    "wsMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "prompt"],
+          "properties": {
+            "type": { "const": "prompt:new" },
+            "prompt": { "$ref": "#/$defs/prompt" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "autoAccepted"],
+          "properties": {
+            "type": { "const": "prompt:resolved" },
+            "id": { "type": "string" },
+            "autoAccepted": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "prompt"],
+          "properties": {
+            "type": { "const": "prompt:updated" },
+            "prompt": { "$ref": "#/$defs/prompt" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "prompts"],
+          "properties": {
+            "type": { "const": "prompts:list" },
+            "prompts": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/prompt" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "isPaused"],
+          "properties": {
+            "type": { "const": "pause:changed" },
+            "isPaused": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "settings"],
+          "properties": {
+            "type": { "const": "settings:updated" },
+            "settings": { "$ref": "#/$defs/settings" }
+          }
+        }
+      ]
+    }
+  }
+}

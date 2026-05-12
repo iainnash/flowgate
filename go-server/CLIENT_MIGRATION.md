@@ -234,7 +234,7 @@ private func sendMessage(_ message: [String: Any]) {
 1. Start Go server on port 8889:
    ```bash
    cd go-server
-   PORT=8889 ./claude-prompt-server
+   PORT=8889 ./flowgate-server
    ```
 
 2. Update client to point to port 8889:

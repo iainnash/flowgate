@@ -15,10 +15,10 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/iain/claude-prompt-ui/handlers"
-	"github.com/iain/claude-prompt-ui/middleware"
-	"github.com/iain/claude-prompt-ui/models"
-	"github.com/iain/claude-prompt-ui/queue"
+	"github.com/iainnash/flowgate/go-server/handlers"
+	"github.com/iainnash/flowgate/go-server/middleware"
+	"github.com/iainnash/flowgate/go-server/models"
+	"github.com/iainnash/flowgate/go-server/queue"
 	"github.com/rs/cors"
 )
 
@@ -60,6 +60,14 @@ func getTokenPath() string {
 	if err != nil {
 		log.Fatal("Cannot determine home directory")
 	}
+	return filepath.Join(homeDir, ".flowgate", "token")
+}
+
+func getLegacyTokenPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal("Cannot determine home directory")
+	}
 	return filepath.Join(homeDir, ".claude-prompt-ui", "token")
 }
 
@@ -76,6 +84,18 @@ func ensureTokenExists() string {
 	if data, err := os.ReadFile(tokenPath); err == nil {
 		token := strings.TrimSpace(string(data))
 		if token != "" {
+			return token
+		}
+	}
+
+	// Backward compatibility: reuse token from the pre-Flowgate path.
+	if data, err := os.ReadFile(getLegacyTokenPath()); err == nil {
+		token := strings.TrimSpace(string(data))
+		if token != "" {
+			if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
+				log.Fatal("Cannot migrate token:", err)
+			}
+			logInfo("Migrated authentication token to: %s", tokenPath)
 			return token
 		}
 	}

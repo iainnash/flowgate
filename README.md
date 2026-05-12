@@ -227,7 +227,7 @@ open build/Flowgate.app
 ./scripts/generate-token.sh
 
 # Start the server
-./go-server/claude-prompt-server
+./go-server/flowgate-server
 ```
 
 Then open http://localhost:8888 in your browser.

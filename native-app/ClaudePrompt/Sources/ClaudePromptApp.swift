@@ -26,7 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     let promptManager: PromptManager
     let settingsManager: SettingsManager
-    let hotkeyManager = HotkeyManager()
+    let hotkeyManager: HotkeyManager
 
     override init() {
         // Create shared WebSocket client
@@ -35,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Initialize managers with shared client
         self.promptManager = PromptManager(webSocket: webSocketClient)
         self.settingsManager = SettingsManager(webSocket: webSocketClient)
+        self.hotkeyManager = HotkeyManager(config: settingsManager.settings.nativeOnly.globalHotkeys)
 
         super.init()
 
@@ -74,7 +75,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Set up floating window
         setupFloatingWindow()
 
-        // Set up hotkeys
+        // Set up hotkey handlers. Initial config was read from local settings on init.
         setupHotkeys()
 
         // Request notification permission
@@ -224,7 +225,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func showSettings() {
-        let settingsView = SettingsView(settingsManager: settingsManager)
+        let settingsView = SettingsView(settingsManager: settingsManager, hotkeyManager: hotkeyManager)
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
@@ -405,7 +406,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func setupFloatingWindow() {
         let contentView = ContentView(
             promptManager: promptManager,
-            settingsManager: settingsManager
+            settingsManager: settingsManager,
+            hotkeyManager: hotkeyManager
         )
 
         let hostingController = NSHostingController(rootView: contentView)
@@ -534,7 +536,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
 
-        hotkeyManager.setup(config: settingsManager.settings.nativeOnly.globalHotkeys)
     }
 
     @objc private func togglePopover() {

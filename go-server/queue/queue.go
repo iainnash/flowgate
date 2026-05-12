@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/iain/claude-prompt-ui/models"
+	"github.com/iainnash/flowgate/go-server/models"
+	"github.com/iainnash/flowgate/go-server/toolcategories"
 )
 
 // Callbacks for queue events
@@ -50,6 +51,8 @@ func New(verbose bool) *Queue {
 
 // SetCallbacks sets the event callbacks
 func (q *Queue) SetCallbacks(cb *Callbacks) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.callbacks = cb
 }
 
@@ -119,11 +122,19 @@ func (q *Queue) Add(input *models.HookInput) (*models.Decision, error) {
 	// Set up timer if needed
 	q.setupTimer(id, pending, &action)
 
+	var onPromptAdded func(*models.Prompt)
+	var promptForCallback *models.Prompt
+	if q.callbacks != nil && q.callbacks.OnPromptAdded != nil {
+		onPromptAdded = q.callbacks.OnPromptAdded
+		promptCopy := *prompt
+		promptForCallback = &promptCopy
+	}
+
 	q.mu.Unlock()
 
 	// Notify observers
-	if q.callbacks != nil && q.callbacks.OnPromptAdded != nil {
-		q.callbacks.OnPromptAdded(prompt)
+	if onPromptAdded != nil {
+		onPromptAdded(promptForCallback)
 	}
 
 	// Wait for resolution
@@ -173,10 +184,10 @@ func (q *Queue) setupTimer(id string, pending *PendingPrompt, action *models.Rul
 // Resolve resolves a prompt with a decision
 func (q *Queue) Resolve(id string, decision *models.Decision, autoAccepted bool) bool {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 
 	pending, exists := q.prompts[id]
 	if !exists {
+		q.mu.Unlock()
 		return false
 	}
 
@@ -199,9 +210,16 @@ func (q *Queue) Resolve(id string, decision *models.Decision, autoAccepted bool)
 	}
 	close(pending.ResolveChan)
 
-	// Notify observers
+	var onPromptResolved func(id string, autoAccepted bool)
 	if q.callbacks != nil && q.callbacks.OnPromptResolved != nil {
-		q.callbacks.OnPromptResolved(id, autoAccepted)
+		onPromptResolved = q.callbacks.OnPromptResolved
+	}
+
+	q.mu.Unlock()
+
+	// Notify observers after releasing the queue lock.
+	if onPromptResolved != nil {
+		onPromptResolved(id, autoAccepted)
 	}
 
 	return true
@@ -222,14 +240,20 @@ func (q *Queue) List() []*models.Prompt {
 // SetPaused pauses or resumes all auto-accept timers
 func (q *Queue) SetPaused(paused bool) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 
 	if q.isPaused == paused {
+		q.mu.Unlock()
 		return
 	}
 
 	q.isPaused = paused
 	q.log("Global pause: %v", paused)
+
+	var onPromptUpdated func(*models.Prompt)
+	if q.callbacks != nil && q.callbacks.OnPromptUpdated != nil {
+		onPromptUpdated = q.callbacks.OnPromptUpdated
+	}
+	updatedPrompts := make([]*models.Prompt, 0, len(q.prompts))
 
 	if paused {
 		// Pausing: save remaining time and clear timers
@@ -251,10 +275,8 @@ func (q *Queue) SetPaused(paused bool) {
 			// Clear autoAcceptAt (signals paused state to clients)
 			pending.AutoAcceptAt = nil
 
-			// Notify observers of update
-			if q.callbacks != nil && q.callbacks.OnPromptUpdated != nil {
-				q.callbacks.OnPromptUpdated(pending.Prompt)
-			}
+			promptCopy := *pending.Prompt
+			updatedPrompts = append(updatedPrompts, &promptCopy)
 		}
 		q.log("Paused %d timers at %s", len(q.pausedRemaining), now.Format(time.RFC3339))
 	} else {
@@ -268,21 +290,29 @@ func (q *Queue) SetPaused(paused bool) {
 				pending.AutoAcceptAt = &acceptAt
 
 				// Restart timer
+				promptID := id
 				pending.Timer = time.AfterFunc(remaining, func() {
-					q.Resolve(id, &models.Decision{
+					q.Resolve(promptID, &models.Decision{
 						Decision: "allow",
 						Reason:   strPtr("Auto-accepted by timer"),
 					}, true)
 				})
 
-				// Notify observers of update
-				if q.callbacks != nil && q.callbacks.OnPromptUpdated != nil {
-					q.callbacks.OnPromptUpdated(pending.Prompt)
-				}
+				promptCopy := *pending.Prompt
+				updatedPrompts = append(updatedPrompts, &promptCopy)
 			}
 			delete(q.pausedRemaining, id)
 		}
 		q.log("Resumed %d timers", len(q.prompts))
+	}
+
+	q.mu.Unlock()
+
+	// Notify observers after releasing the queue lock.
+	if onPromptUpdated != nil {
+		for _, prompt := range updatedPrompts {
+			onPromptUpdated(prompt)
+		}
 	}
 }
 
@@ -459,68 +489,9 @@ func matchesPattern(pattern string, toolName string, toolInput map[string]interf
 	}
 }
 
-// getToolCategory returns the category for a tool
+// getToolCategory returns the category for a tool.
 func getToolCategory(toolName string) string {
-	// MCP tools
-	if len(toolName) >= 5 && toolName[:5] == "mcp__" {
-		return "mcp"
-	}
-
-	// Read tools
-	readTools := map[string]bool{
-		"Read": true, "Glob": true, "Grep": true,
-		"ListMcpResourcesTool": true, "ReadMcpResourceTool": true,
-		"ToolSearch": true,
-	}
-	if readTools[toolName] {
-		return "read"
-	}
-
-	// Write tools
-	writeTools := map[string]bool{
-		"Edit": true, "Write": true, "NotebookEdit": true,
-	}
-	if writeTools[toolName] {
-		return "write"
-	}
-
-	// Execute tools
-	executeTools := map[string]bool{
-		"Bash": true, "KillShell": true, "Skill": true,
-	}
-	if executeTools[toolName] {
-		return "execute"
-	}
-
-	// Task tools
-	taskTools := map[string]bool{
-		"Task": true, "TaskList": true, "TaskGet": true,
-		"TaskOutput": true, "TaskCreate": true, "TaskUpdate": true,
-		"TaskStop": true,
-	}
-	if taskTools[toolName] {
-		return "task"
-	}
-
-	// Web tools
-	webTools := map[string]bool{
-		"WebFetch": true, "WebSearch": true,
-	}
-	if webTools[toolName] {
-		return "web"
-	}
-
-	// Interactive tools
-	interactiveTools := map[string]bool{
-		"AskUserQuestion": true,
-		"ExitPlanMode":    true,
-		"EnterPlanMode":   true,
-	}
-	if interactiveTools[toolName] {
-		return "interactive"
-	}
-
-	return "other"
+	return toolcategories.CategoryFor(toolName)
 }
 
 // Helper function
