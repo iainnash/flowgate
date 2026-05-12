@@ -153,14 +153,13 @@ struct ExitPlanModeCardView: View {
                         if isActive {
                             Text("⌘⇧N")
                                 .font(.system(size: 9))
-                                .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, isActive ? 2 : 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(FilledActionButtonStyle(color: .red, windowFocused: windowFocused))
 
                 // Start Implementing (accept)
                 Button(action: onAccept) {
@@ -169,14 +168,13 @@ struct ExitPlanModeCardView: View {
                         if isActive {
                             Text("⌘⇧Y")
                                 .font(.system(size: 9))
-                                .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, isActive ? 2 : 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(FilledActionButtonStyle(color: .green, windowFocused: windowFocused))
             }
         }
         .padding()

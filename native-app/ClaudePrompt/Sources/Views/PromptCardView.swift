@@ -148,16 +148,14 @@ struct PromptCardView: View {
                     showOtherField = false
                     otherReason = ""
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(FilledActionButtonStyle(color: .green, windowFocused: windowFocused))
 
                 Button("Deny") {
                     onDenyWithReason?(otherReason)
                     showOtherField = false
                     otherReason = ""
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(FilledActionButtonStyle(color: .red, windowFocused: windowFocused))
             }
         }
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -295,14 +293,13 @@ struct PromptCardView: View {
                         if isActive {
                             Text("⌘⇧Y")
                                 .font(.system(size: 9))
-                                .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
+                                .foregroundColor(.white.opacity(0.7))
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, isActive ? 6 : 8)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(FilledActionButtonStyle(color: .green, windowFocused: windowFocused))
             }
             .frame(maxWidth: .infinity)
 
@@ -316,14 +313,13 @@ struct PromptCardView: View {
                     if isActive {
                         Text("⌘⇧N")
                             .font(.system(size: 9))
-                            .foregroundColor(windowFocused ? .white.opacity(0.7) : .secondary)
+                            .foregroundColor(.white.opacity(0.7))
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, isActive ? 6 : 8)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
+            .buttonStyle(FilledActionButtonStyle(color: .red, windowFocused: windowFocused))
             .frame(maxWidth: .infinity)
 
             // Other button - toggles inline text field

@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var popover: NSPopover!
     var floatingWindow: NSWindow?
     var logWindow: NSWindow?
+    var setupWindow: NSWindow?
 
     let promptManager: PromptManager
     let settingsManager: SettingsManager
@@ -98,8 +99,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    private func showSetupInstructions() {
-        // Get hook path from app bundle
+    @objc private func showSetupInstructions() {
+        if let existing = setupWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
         let hookPath: String
         if let resourcePath = Bundle.main.resourcePath {
             hookPath = (resourcePath as NSString).appendingPathComponent("prompt-hook")
@@ -107,51 +111,51 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hookPath = "/Applications/Flowgate.app/Contents/Resources/prompt-hook"
         }
 
-        let alert = NSAlert()
-        alert.messageText = "Welcome to Flowgate!"
-        alert.informativeText = """
-            To integrate with Claude Code, add this to your ~/.claude/settings.json:
-
+        let hookConfig = """
             {
               "hooks": {
-                "PreToolUse": ["\(hookPath)"]
+                "PreToolUse": [
+                  {
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "\(hookPath)"
+                      }
+                    ]
+                  }
+                ]
               }
             }
-
-            The hook path has been copied to your clipboard.
             """
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open Settings File")
-        alert.addButton(withTitle: "OK")
 
-        // Copy hook path to clipboard
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(hookPath, forType: .string)
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            // Open or create settings file
-            let settingsPath = NSString(string: "~/.claude/settings.json").expandingTildeInPath
-            let settingsURL = URL(fileURLWithPath: settingsPath)
-
-            // Create directory if needed
-            let settingsDir = settingsURL.deletingLastPathComponent()
-            try? FileManager.default.createDirectory(at: settingsDir, withIntermediateDirectories: true)
-
-            // Create file if it doesn't exist
-            if !FileManager.default.fileExists(atPath: settingsPath) {
-                let defaultSettings = """
-                    {
-                      "hooks": {
-                        "PreToolUse": ["\(hookPath)"]
-                      }
+        let window = NSWindow(
+            contentViewController: NSHostingController(rootView: SetupInstructionsView(
+                hookConfig: hookConfig,
+                onOpenSettings: {
+                    let settingsPath = NSString(string: "~/.claude/settings.json").expandingTildeInPath
+                    let settingsURL = URL(fileURLWithPath: settingsPath)
+                    try? FileManager.default.createDirectory(
+                        at: settingsURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    if !FileManager.default.fileExists(atPath: settingsPath) {
+                        try? hookConfig.write(to: settingsURL, atomically: true, encoding: .utf8)
                     }
-                    """
-                try? defaultSettings.write(to: settingsURL, atomically: true, encoding: .utf8)
-            }
+                    NSWorkspace.shared.open(settingsURL)
+                },
+                onClose: { [weak self] in
+                    self?.setupWindow?.close()
+                }
+            ))
+        )
+        window.title = "Flowgate Setup"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        setupWindow = window
 
-            NSWorkspace.shared.open(settingsURL)
-        }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func setupApplicationMenu() {
@@ -165,6 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appMenu.addItem(NSMenuItem(title: "About Flowgate", action: #selector(showAbout), keyEquivalent: ""))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        appMenu.addItem(NSMenuItem(title: "Installation Instructions...", action: #selector(showSetupInstructions), keyEquivalent: ""))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Flowgate", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 

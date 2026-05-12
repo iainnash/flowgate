@@ -421,8 +421,7 @@ struct ContentView: View {
                     showingOtherDialog = false
                     otherReason = ""
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(FilledActionButtonStyle(color: .green, windowFocused: controlActiveState == .key))
 
                 Button("Deny with Reason") {
                     if let prompt = selectedPromptForOther {
@@ -431,8 +430,7 @@ struct ContentView: View {
                     showingOtherDialog = false
                     otherReason = ""
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(FilledActionButtonStyle(color: .red, windowFocused: controlActiveState == .key))
             }
         }
         .padding()

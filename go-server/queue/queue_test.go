@@ -125,6 +125,71 @@ func TestResolveRemovesPromptAndNotifies(t *testing.T) {
 	}
 }
 
+func TestAutoAcceptNotifiesPromptAddedBeforeResolved(t *testing.T) {
+	q := newTestQueue([]models.Rule{
+		{
+			Name:     "Auto accept bash",
+			ToolName: "Bash",
+			Action:   models.RuleAction{Type: "auto-accept"},
+			Enabled:  true,
+		},
+	})
+
+	events := make(chan string, 2)
+	q.SetCallbacks(&Callbacks{
+		OnPromptAdded: func(*models.Prompt) {
+			events <- "added"
+		},
+		OnPromptResolved: func(string, bool) {
+			events <- "resolved"
+		},
+	})
+
+	decisions := make(chan *models.Decision, 1)
+	go func() {
+		decision, err := q.Add(&models.HookInput{
+			SessionID:     "session-1",
+			ToolName:      "Bash",
+			ToolInput:     map[string]interface{}{"command": "pnpm test"},
+			HookEventName: "PreToolUse",
+			CWD:           "/tmp/project",
+		})
+		if err != nil {
+			t.Errorf("Add returned error: %v", err)
+			return
+		}
+		decisions <- decision
+	}()
+
+	if first := waitForQueueTestEvent(t, events); first != "added" {
+		t.Fatalf("expected prompt added event first, got %q", first)
+	}
+	if second := waitForQueueTestEvent(t, events); second != "resolved" {
+		t.Fatalf("expected prompt resolved event second, got %q", second)
+	}
+
+	select {
+	case decision := <-decisions:
+		if decision.Decision != "allow" {
+			t.Fatalf("expected auto-accept decision to allow, got %q", decision.Decision)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for auto-accept decision")
+	}
+}
+
+func waitForQueueTestEvent(t *testing.T, events <-chan string) string {
+	t.Helper()
+
+	select {
+	case event := <-events:
+		return event
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for queue event")
+		return ""
+	}
+}
+
 func TestSetPausedUpdatesAndRestartsTimers(t *testing.T) {
 	q := newTestQueue(nil)
 	acceptIn := 5

@@ -119,9 +119,6 @@ func (q *Queue) Add(input *models.HookInput) (*models.Decision, error) {
 	q.prompts[id] = pending
 	q.log("Added prompt: %s (%s) - type: %s", id, input.ToolName, acceptType)
 
-	// Set up timer if needed
-	q.setupTimer(id, pending, &action)
-
 	var onPromptAdded func(*models.Prompt)
 	var promptForCallback *models.Prompt
 	if q.callbacks != nil && q.callbacks.OnPromptAdded != nil {
@@ -136,6 +133,14 @@ func (q *Queue) Add(input *models.HookInput) (*models.Decision, error) {
 	if onPromptAdded != nil {
 		onPromptAdded(promptForCallback)
 	}
+
+	q.mu.Lock()
+	if currentPending, exists := q.prompts[id]; exists {
+		// Start timers only after prompt:new has been emitted so clients cannot
+		// receive prompt:resolved before they know the prompt exists.
+		q.setupTimer(id, currentPending, &action)
+	}
+	q.mu.Unlock()
 
 	// Wait for resolution
 	decision := <-resolveChan

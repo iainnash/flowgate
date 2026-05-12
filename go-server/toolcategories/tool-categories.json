@@ -19,6 +19,7 @@
     ],
     "write": [
       "Edit",
+      "MultiEdit",
       "Write",
       "NotebookEdit"
     ],
