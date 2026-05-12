@@ -88,18 +88,6 @@ func ensureTokenExists() string {
 		}
 	}
 
-	// Backward compatibility: reuse token from the pre-Flowgate path.
-	if data, err := os.ReadFile(getLegacyTokenPath()); err == nil {
-		token := strings.TrimSpace(string(data))
-		if token != "" {
-			if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
-				log.Fatal("Cannot migrate token:", err)
-			}
-			logInfo("Migrated authentication token to: %s", tokenPath)
-			return token
-		}
-	}
-
 	// Generate new token
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
