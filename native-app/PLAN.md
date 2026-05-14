@@ -35,7 +35,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Claude Prompt (macOS)                     │
+│                    Flowgate (macOS)                     │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │ Menu Bar    │  │ Floating    │  │ Global Hotkeys      │  │
@@ -50,15 +50,15 @@
 │  └─────────────────────────────────────────────────────────┘│
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────┐  ┌─────────────────────────────┐  │
-│  │  WebSocketClient    │  │  HTTPClient                 │  │
-│  │  - Connect to :8888 │  │  - POST /api/prompts/resolve│  │
-│  │  - Receive prompts  │  │  - GET/PUT /api/settings    │  │
+│  │  WebSocketClient    │  │  Settings + actions        │  │
+│  │  - Connect to :8888 │  │  - Resolve via WebSocket   │  │
+│  │  - Receive prompts  │  │  - Sync settings via WS    │  │
 │  └─────────────────────┘  └─────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                Existing Node.js Server                       │
+│                  Embedded Go Server                          │
 │                    (port 8888)                               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -92,9 +92,10 @@
    - Handle message types: `prompt:new`, `prompt:resolved`, `prompts:list`, `settings:updated`
    - Auto-reconnect on disconnect
 
-5. **HTTP API Integration**
-   - `POST /api/prompts/:id/resolve` - Submit decisions
-   - `GET/PUT /api/settings` - Sync settings
+5. **WebSocket Actions**
+   - `resolve` - Submit decisions
+   - `updateSettings` - Sync settings
+   - `togglePause` - Pause or resume auto-accept timers
 
 ### Enhanced Features (Phase 2)
 
@@ -132,7 +133,7 @@
 
 ## Settings File
 
-Store settings in: `~/.config/claude-prompt-ui/settings.json`
+Store settings in: `~/.config/flowgate/settings.json`
 
 ```json
 {
@@ -193,7 +194,7 @@ native-app/
 │   │
 │   ├── Services/
 │   │   ├── WebSocketClient.swift       # WebSocket connection management
-│   │   ├── HTTPClient.swift            # REST API calls
+│   │   ├── HTTPClient.swift            # Legacy health/REST helper
 │   │   ├── PromptManager.swift         # Prompt state management
 │   │   ├── SettingsManager.swift       # Settings file I/O
 │   │   └── HotkeyManager.swift         # Global hotkey registration
@@ -263,15 +264,7 @@ dependencies: [
 
 ## Server Compatibility
 
-The native app requires the existing server to be running. Options for managing this:
-
-1. **Manual** - User starts server separately (`pnpm --filter server start`)
-
-2. **Auto-detect & Prompt** - Native app checks if server is running, prompts user to start it
-
-3. **Bundled Server** - Native app includes Node.js runtime and server code, manages lifecycle
-
-Recommendation: Start with option 2, consider option 3 for a fully standalone distribution.
+The native app starts the bundled `flowgate-server` binary on launch. For development, `FLOWGATE_SERVER_PATH` can point to a locally built server binary.
 
 ---
 
@@ -283,9 +276,6 @@ Recommendation: Start with option 2, consider option 3 for a fully standalone di
 
 2. **Notarization** - Need Apple Developer account for distribution outside App Store
 
-3. **Server Bundling** - If bundled, should we use:
-   - Full Node.js runtime (~70MB)
-   - Compiled binary via pkg/nexe (~50MB)
-   - Rewrite minimal server in Swift (complex)
+3. **Server Bundling** - Keep the Go server embedded, or allow advanced users to connect to an external instance?
 
 4. **Multiple Monitors** - Should floating window follow focus or stay on primary?

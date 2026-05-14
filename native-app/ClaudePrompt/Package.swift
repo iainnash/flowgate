@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudePrompt",
+    name: "Flowgate",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "ClaudePrompt", targets: ["ClaudePrompt"])
+        .executable(name: "Flowgate", targets: ["ClaudePrompt"])
     ],
     dependencies: [
         .package(url: "https://github.com/daltoniam/Starscream.git", from: "4.0.0"),

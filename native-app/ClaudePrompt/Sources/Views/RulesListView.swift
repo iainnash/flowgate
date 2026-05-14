@@ -1,11 +1,27 @@
 import SwiftUI
 
+private enum RuleEditTarget: Identifiable {
+    case new
+    case existing(Rule)
+
+    var id: String {
+        switch self {
+        case .new: return "__new__"
+        case .existing(let rule): return rule.name
+        }
+    }
+
+    var rule: Rule? {
+        if case .existing(let r) = self { return r }
+        return nil
+    }
+}
+
 struct RulesListView: View {
     @ObservedObject var settingsManager: SettingsManager
     @Environment(\.dismiss) var dismiss
 
-    @State private var showingEditor = false
-    @State private var editingRule: Rule?
+    @State private var editTarget: RuleEditTarget?
 
     private var rules: [Rule] {
         settingsManager.settings.server.rules
@@ -40,8 +56,7 @@ struct RulesListView: View {
                             })
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                editingRule = rule
-                                showingEditor = true
+                                editTarget = .existing(rule)
                             }
                         }
                         .onDelete(perform: deleteRules)
@@ -66,19 +81,18 @@ struct RulesListView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        editingRule = nil
-                        showingEditor = true
+                        editTarget = .new
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showingEditor) {
+            .sheet(item: $editTarget) { target in
                 RuleEditorView(
-                    rule: editingRule,
+                    rule: target.rule,
                     existingNames: Set(rules.map { $0.name })
                 ) { newRule in
-                    saveRule(newRule, replacing: editingRule)
+                    saveRule(newRule, replacing: target.rule)
                 }
             }
         }

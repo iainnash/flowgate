@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The Claude Prompt UI consists of:
+The Flowgate consists of:
 
 1. **Go Server** (`go-server/`) - Backend API and WebSocket hub
 2. **Web UI** (`ui/`) - Svelte frontend
@@ -45,7 +45,7 @@ pnpm build
 
 This:
 1. Builds UI → `go-server/public/`
-2. Builds Go server → `go-server/claude-prompt-server`
+2. Builds Go server → `go-server/flowgate-server`
 3. Builds Go hook → `hooks/prompt-hook`
 4. Builds Stream Deck client → `stream-deck/dist/`
 
@@ -53,7 +53,7 @@ This:
 
 ```bash
 cd go-server
-./claude-prompt-server
+./flowgate-server
 ```
 
 The Go server serves:
@@ -105,12 +105,12 @@ func findPublicDir() string {
 ## Directory Structure
 
 ```
-claude-prompt-ui/
+flowgate/
 ├── go-server/
 │   ├── public/              # UI build output (gitignored)
 │   │   ├── index.html
 │   │   └── assets/
-│   ├── claude-prompt-server # Binary (gitignored)
+│   ├── flowgate-server # Binary (gitignored)
 │   └── main.go
 ├── ui/
 │   ├── src/
@@ -133,8 +133,8 @@ VERBOSE=true           # Enable verbose logging
 ### Go Hook
 
 ```bash
-CLAUDE_PROMPT_UI_SERVER=http://127.0.0.1:8888  # Server URL
-CLAUDE_PROMPT_UI_TIMEOUT=120000                # Timeout in ms
+FLOWGATE_SERVER=http://127.0.0.1:8888  # Server URL
+FLOWGATE_TIMEOUT=120000                # Timeout in ms
 ```
 
 ### Stream Deck Client
@@ -148,13 +148,13 @@ SERVER_URL=ws://127.0.0.1:8888/ws  # WebSocket URL
 ### Scenario 1: Single Binary + Static Files
 
 **What to deploy:**
-- `go-server/claude-prompt-server`
+- `go-server/flowgate-server`
 - `go-server/public/` directory
 
 **How to run:**
 ```bash
 cd go-server
-./claude-prompt-server
+./flowgate-server
 ```
 
 **Serves at:** http://127.0.0.1:8888
@@ -177,7 +177,7 @@ FROM golang:1.21 AS go-builder
 WORKDIR /app
 COPY go-server/ ./go-server/
 COPY hooks/ ./hooks/
-RUN cd go-server && go build -o claude-prompt-server
+RUN cd go-server && go build -o flowgate-server
 RUN cd hooks && go build -o prompt-hook
 
 FROM node:20 AS ui-builder
@@ -190,11 +190,11 @@ RUN pnpm --filter ui build
 
 FROM debian:bookworm-slim
 WORKDIR /app
-COPY --from=go-builder /app/go-server/claude-prompt-server .
+COPY --from=go-builder /app/go-server/flowgate-server .
 COPY --from=go-builder /app/hooks/prompt-hook ./hooks/
 COPY --from=ui-builder /app/go-server/public ./public/
 EXPOSE 8888
-CMD ["./claude-prompt-server"]
+CMD ["./flowgate-server"]
 ```
 
 ## Testing the Production Build
@@ -205,7 +205,7 @@ pnpm build
 
 # 2. Start server
 cd go-server
-./claude-prompt-server
+./flowgate-server
 
 # 3. Open browser
 open http://127.0.0.1:8888
@@ -242,7 +242,7 @@ PORT=9000 pnpm dev
 **Production:**
 ```bash
 cd go-server
-PORT=9000 ./claude-prompt-server
+PORT=9000 ./flowgate-server
 ```
 
 **Update UI proxy in development:**

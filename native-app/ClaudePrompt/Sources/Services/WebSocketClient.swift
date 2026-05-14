@@ -111,7 +111,7 @@ class WebSocketClient: NSObject, ObservableObject {
 
                 If the problem persists:
                 1. Quit the app completely
-                2. Delete ~/.claude-prompt-ui/token
+                2. Delete ~/.flowgate/token
                 3. Restart the app
                 """
             alert.alertStyle = .critical
@@ -187,13 +187,16 @@ class WebSocketClient: NSObject, ObservableObject {
 
     // MARK: - Send Messages
 
-    func sendResolve(id: String, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil) {
+    func sendResolve(id: String, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil, additionalContext: String? = nil) {
         var decisionData: [String: Any] = ["decision": decision.rawValue]
         if let reason = reason {
             decisionData["reason"] = reason
         }
         if let updatedInput = updatedInput {
             decisionData["updatedInput"] = updatedInput
+        }
+        if let additionalContext = additionalContext {
+            decisionData["additionalContext"] = additionalContext
         }
 
         let message: [String: Any] = [

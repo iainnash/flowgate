@@ -9,6 +9,8 @@ class HotkeyManager: ObservableObject {
     private var otherHotKey: HotKey?
     private var toggleHotKey: HotKey?
     private var pauseAllHotKey: HotKey?
+    private var currentConfig: HotkeyConfig?
+    private(set) var isSuspended = false
 
     var onAccept: (@Sendable () -> Void)?
     var onDeny: (@Sendable () -> Void)?
@@ -16,14 +18,44 @@ class HotkeyManager: ObservableObject {
     var onToggle: (@Sendable () -> Void)?
     var onPauseAll: (@Sendable () -> Void)?
 
+    init(config: HotkeyConfig? = nil) {
+        if let config {
+            setup(config: config)
+        }
+    }
+
     func setup(config: HotkeyConfig) {
+        currentConfig = config
+        guard !isSuspended else {
+            unregisterHotkeys()
+            return
+        }
+
+        registerHotkeys(config: config)
+    }
+
+    func setSuspended(_ suspended: Bool) {
+        guard isSuspended != suspended else { return }
+        isSuspended = suspended
+
+        if suspended {
+            unregisterHotkeys()
+        } else if let currentConfig {
+            registerHotkeys(config: currentConfig)
+        }
+    }
+
+    private func unregisterHotkeys() {
         // Clear existing hotkeys
         acceptHotKey = nil
         denyHotKey = nil
         otherHotKey = nil
         toggleHotKey = nil
         pauseAllHotKey = nil
+    }
 
+    private func registerHotkeys(config: HotkeyConfig) {
+        unregisterHotkeys()
         // Set up new hotkeys
         if let (key, modifiers) = parseHotkey(config.accept) {
             acceptHotKey = HotKey(key: key, modifiers: modifiers)
@@ -82,61 +114,11 @@ class HotkeyManager: ObservableObject {
             }
         }
 
-        guard let keyStr = keyString, let key = keyFromString(keyStr) else {
+        guard let keyStr = keyString,
+              let key = Key(string: keyStr) else {
             return nil
         }
 
         return (key, modifiers)
-    }
-
-    private func keyFromString(_ string: String) -> Key? {
-        switch string.lowercased() {
-        case "a": return .a
-        case "b": return .b
-        case "c": return .c
-        case "d": return .d
-        case "e": return .e
-        case "f": return .f
-        case "g": return .g
-        case "h": return .h
-        case "i": return .i
-        case "j": return .j
-        case "k": return .k
-        case "l": return .l
-        case "m": return .m
-        case "n": return .n
-        case "o": return .o
-        case "p": return .p
-        case "q": return .q
-        case "r": return .r
-        case "s": return .s
-        case "t": return .t
-        case "u": return .u
-        case "v": return .v
-        case "w": return .w
-        case "x": return .x
-        case "y": return .y
-        case "z": return .z
-        case "1": return .one
-        case "2": return .two
-        case "3": return .three
-        case "4": return .four
-        case "5": return .five
-        case "6": return .six
-        case "7": return .seven
-        case "8": return .eight
-        case "9": return .nine
-        case "0": return .zero
-        case "space": return .space
-        case "return", "enter": return .return
-        case "escape", "esc": return .escape
-        case "tab": return .tab
-        case "delete", "backspace": return .delete
-        case "up": return .upArrow
-        case "down": return .downArrow
-        case "left": return .leftArrow
-        case "right": return .rightArrow
-        default: return nil
-        }
     }
 }

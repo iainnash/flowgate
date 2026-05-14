@@ -28,7 +28,7 @@ Client → WebSocket /ws (all operations)
 
 ## API Comparison
 
-### TypeScript Version (7 HTTP endpoints)
+### Historical TypeScript Version (Removed HTTP endpoints)
 ```
 POST /api/prompt            # Hook (blocking)
 GET  /api/prompts           # List prompts

@@ -1,6 +1,6 @@
-# Claude Prompt Native macOS App
+# Flowgate Native macOS App
 
-A native macOS menu bar app for the Claude Prompt UI approval system.
+A native macOS menu bar app for the Flowgate approval system.
 
 ## Features
 
@@ -18,18 +18,18 @@ A native macOS menu bar app for the Claude Prompt UI approval system.
 
 - macOS 13.0 or later
 - Swift 5.9+
-- The claude-prompt-ui server running on port 8888
+- The flowgate server running on port 8888
 
 ## Quick Start
 
 ```bash
 # Make sure the server is running first
-cd /path/to/claude-prompt-ui
+cd /path/to/flowgate
 pnpm dev
 
 # Then in another terminal, build and run the native app
 cd native-app/ClaudePrompt
-swift run ClaudePrompt
+swift run Flowgate
 ```
 
 ## Building
@@ -44,11 +44,11 @@ swift build
 swift build -c release
 
 # Run directly
-swift run ClaudePrompt
+swift run Flowgate
 
 # Or run the built executable
-.build/debug/ClaudePrompt      # debug
-.build/release/ClaudePrompt    # release
+.build/debug/Flowgate      # debug
+.build/release/Flowgate    # release
 ```
 
 ## Project Structure
@@ -67,7 +67,7 @@ native-app/
         │   └── Settings.swift      # AppSettings, rules, native config
         ├── Services/
         │   ├── WebSocketClient.swift   # WebSocket connection
-        │   ├── HTTPClient.swift        # REST API calls
+        │   ├── HTTPClient.swift        # Legacy health/REST helper
         │   ├── PromptManager.swift     # Prompt state management
         │   ├── SettingsManager.swift   # Settings file I/O
         │   └── HotkeyManager.swift     # Global hotkey registration
@@ -79,7 +79,7 @@ native-app/
 
 ## Configuration
 
-Settings are stored in `~/.config/claude-prompt-ui/settings.json`:
+Settings are stored in `~/.config/flowgate/settings.json`:
 
 ```json
 {
@@ -105,15 +105,14 @@ Settings are stored in `~/.config/claude-prompt-ui/settings.json`:
 
 ## Architecture
 
-The native app connects to the existing Node.js server via WebSocket and HTTP:
+The native app starts the embedded Go server and uses WebSocket messages for prompt actions and settings updates:
 
 ```
 Native App (Swift/SwiftUI)
     ├── WebSocket → ws://127.0.0.1:8888/ws (real-time updates)
-    └── HTTP API → http://127.0.0.1:8888/api/* (actions)
               │
               ▼
-    Existing Server (Node.js, port 8888)
+    Embedded Go Server (port 8888)
               ▲
               │
     Claude Code Hook (PreToolUse)
@@ -126,9 +125,6 @@ Native App (Swift/SwiftUI)
 
 ## Known Limitations (Phase 1)
 
-- Server must be started separately (not bundled)
-- Settings UI not yet implemented (edit JSON directly or use web UI)
 - No launch-at-login support yet
-- No countdown animation on buttons yet
 
 See `PLAN.md` for the full roadmap.

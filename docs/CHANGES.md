@@ -45,7 +45,7 @@ Migrated from TypeScript server to Go server architecture with simplified schema
 ## File Structure
 
 ```
-claude-prompt-ui/
+flowgate/
 ├── go-server/              # Go backend (8.6MB binary)
 │   ├── handlers/
 │   ├── models/

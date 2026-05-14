@@ -2,7 +2,7 @@
 
 ## What Was Created
 
-A complete Go rewrite of the Claude Prompt UI server with these improvements:
+A complete Go rewrite of the Flowgate server with these improvements:
 
 ### Key Changes
 - **Single binary**: 8.6MB (vs ~50MB with Node.js)
@@ -52,13 +52,13 @@ make universal
 
 ```bash
 # Normal mode
-./claude-prompt-server
+./flowgate-server
 
 # Verbose mode (see all operations)
-VERBOSE=true ./claude-prompt-server
+VERBOSE=true ./flowgate-server
 
 # Different port
-PORT=9000 ./claude-prompt-server
+PORT=9000 ./flowgate-server
 ```
 
 ### 4. Test
@@ -123,7 +123,7 @@ make test
 make universal
 
 # Copy to app bundle
-cp claude-prompt-server ../native-app/ClaudePrompt/Resources/
+cp flowgate-server ../native-app/ClaudePrompt/Resources/
 ```
 
 ### Launch from Swift
@@ -136,7 +136,7 @@ class ServerManager {
 
     func start() throws {
         guard let serverPath = Bundle.main.path(
-            forResource: "claude-prompt-server",
+            forResource: "flowgate-server",
             ofType: nil,
             inDirectory: "Resources"
         ) else {
@@ -189,7 +189,7 @@ To use the new WebSocket-only API, see `CLIENT_MIGRATION.md`.
 
 1. **Test the Go server** alongside TypeScript version
    ```bash
-   PORT=8889 ./claude-prompt-server
+   PORT=8889 ./flowgate-server
    ```
 
 2. **Update clients** to use WebSocket messages (see CLIENT_MIGRATION.md)
@@ -211,7 +211,7 @@ To use the new WebSocket-only API, see `CLIENT_MIGRATION.md`.
 lsof -ti:8888 | xargs kill
 
 # Or use different port
-PORT=8889 ./claude-prompt-server
+PORT=8889 ./flowgate-server
 ```
 
 ### Static Files Not Found
@@ -233,7 +233,7 @@ Check:
 
 Enable verbose mode to see connection attempts:
 ```bash
-VERBOSE=true ./claude-prompt-server
+VERBOSE=true ./flowgate-server
 ```
 
 ## Questions?

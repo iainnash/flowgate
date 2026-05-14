@@ -15,10 +15,10 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/iain/claude-prompt-ui/handlers"
-	"github.com/iain/claude-prompt-ui/middleware"
-	"github.com/iain/claude-prompt-ui/models"
-	"github.com/iain/claude-prompt-ui/queue"
+	"github.com/iainnash/flowgate/go-server/handlers"
+	"github.com/iainnash/flowgate/go-server/middleware"
+	"github.com/iainnash/flowgate/go-server/models"
+	"github.com/iainnash/flowgate/go-server/queue"
 	"github.com/rs/cors"
 )
 
@@ -56,6 +56,14 @@ var upgrader = websocket.Upgrader{
 }
 
 func getTokenPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal("Cannot determine home directory")
+	}
+	return filepath.Join(homeDir, ".flowgate", "token")
+}
+
+func getLegacyTokenPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatal("Cannot determine home directory")

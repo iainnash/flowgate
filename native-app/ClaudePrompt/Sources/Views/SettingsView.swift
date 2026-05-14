@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
+    let hotkeyManager: HotkeyManager?
     @Environment(\.dismiss) var dismiss
 
     @State private var acceptKey: String
@@ -16,9 +17,11 @@ struct SettingsView: View {
     @State private var showAutoAccept: Bool
     @State private var enableAnimations: Bool
     @State private var showingRules: Bool = false
+    @State private var recordingHotkeyCount: Int = 0
 
-    init(settingsManager: SettingsManager) {
+    init(settingsManager: SettingsManager, hotkeyManager: HotkeyManager? = nil) {
         self.settingsManager = settingsManager
+        self.hotkeyManager = hotkeyManager
         let settings = settingsManager.settings
         _acceptKey = State(initialValue: settings.nativeOnly.globalHotkeys.accept)
         _denyKey = State(initialValue: settings.nativeOnly.globalHotkeys.deny)
@@ -73,49 +76,34 @@ struct SettingsView: View {
                     HStack {
                         Text("Accept prompt")
                         Spacer()
-                        TextField("", text: $acceptKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .multilineTextAlignment(.center)
+                        hotkeyRecorder(value: $acceptKey)
                     }
 
                     HStack {
                         Text("Deny prompt")
                         Spacer()
-                        TextField("", text: $denyKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .multilineTextAlignment(.center)
+                        hotkeyRecorder(value: $denyKey)
                     }
 
                     HStack {
                         Text("Other response")
                         Spacer()
-                        TextField("", text: $otherKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .multilineTextAlignment(.center)
+                        hotkeyRecorder(value: $otherKey)
                     }
 
                     HStack {
                         Text("Toggle window")
                         Spacer()
-                        TextField("", text: $toggleKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .multilineTextAlignment(.center)
+                        hotkeyRecorder(value: $toggleKey)
                     }
 
                     HStack {
                         Text("Pause/Play all")
                         Spacer()
-                        TextField("", text: $pauseAllKey)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .multilineTextAlignment(.center)
+                        hotkeyRecorder(value: $pauseAllKey)
                     }
 
-                    Text("Format: cmd+shift+key (e.g., cmd+shift+y)")
+                    Text("Click a field, then press a key combination. Escape cancels.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -210,6 +198,10 @@ struct SettingsView: View {
             RulesListView(settingsManager: settingsManager)
                 .frame(minWidth: 550, minHeight: 450)
         }
+        .onDisappear {
+            recordingHotkeyCount = 0
+            hotkeyManager?.setSuspended(false)
+        }
     }
 
     private func saveSettings() {
@@ -231,8 +223,23 @@ struct SettingsView: View {
         // Save to local file
         settingsManager.saveToFile()
 
+        // Re-register native hotkeys immediately
+        hotkeyManager?.setup(config: settingsManager.settings.nativeOnly.globalHotkeys)
+
         // Push server settings to server via WebSocket
         settingsManager.pushToServer()
+    }
+
+    private func hotkeyRecorder(value: Binding<String>) -> some View {
+        HotkeyRecorderField(value: value) { isRecording in
+            if isRecording {
+                recordingHotkeyCount += 1
+            } else {
+                recordingHotkeyCount = max(0, recordingHotkeyCount - 1)
+            }
+            hotkeyManager?.setSuspended(recordingHotkeyCount > 0)
+        }
+        .frame(width: 160)
     }
 }
 

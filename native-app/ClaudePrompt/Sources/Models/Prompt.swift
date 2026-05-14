@@ -5,6 +5,7 @@ enum Decision: String, Codable {
     case allow
     case deny
     case ask
+    case deferDecision = "defer"
 }
 
 enum ToolCategory: String, Codable, CaseIterable, Identifiable {

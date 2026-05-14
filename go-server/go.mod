@@ -1,4 +1,4 @@
-module github.com/iain/claude-prompt-ui
+module github.com/iainnash/flowgate/go-server
 
 go 1.21
 

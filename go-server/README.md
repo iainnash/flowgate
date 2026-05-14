@@ -1,4 +1,4 @@
-# Claude Prompt UI - Go Server
+# Flowgate - Go Server
 
 A lightweight Go server for managing Claude Code tool prompts with WebSocket-based real-time communication.
 
@@ -44,13 +44,13 @@ A lightweight Go server for managing Claude Code tool prompts with WebSocket-bas
 go mod download
 
 # Build for current platform
-go build -o claude-prompt-server
+go build -o flowgate-server
 
 # Build for macOS (Intel)
-GOOS=darwin GOARCH=amd64 go build -o claude-prompt-server-intel
+GOOS=darwin GOARCH=amd64 go build -o flowgate-server-intel
 
 # Build for macOS (Apple Silicon)
-GOOS=darwin GOARCH=arm64 go build -o claude-prompt-server-arm64
+GOOS=darwin GOARCH=arm64 go build -o flowgate-server-arm64
 
 # Cross-compile universal binary (requires macOS)
 make universal
@@ -60,13 +60,13 @@ make universal
 
 ```bash
 # Normal mode
-./claude-prompt-server
+./flowgate-server
 
 # Verbose mode with detailed logging
-VERBOSE=true ./claude-prompt-server
+VERBOSE=true ./flowgate-server
 
 # Custom port
-PORT=9000 ./claude-prompt-server
+PORT=9000 ./flowgate-server
 ```
 
 ## Environment Variables
@@ -79,17 +79,17 @@ PORT=9000 ./claude-prompt-server
 The server automatically serves the web UI from `../server/public/` if available. For the native macOS app, embed the compiled binary in the app bundle:
 
 ```
-ClaudePrompt.app/
+Flowgate.app/
   Contents/
     MacOS/
-      ClaudePrompt          # SwiftUI app
+      Flowgate              # SwiftUI app
     Resources/
-      claude-prompt-server  # Go binary
+      flowgate-server       # Go binary
 ```
 
 Start the server from Swift:
 ```swift
-let serverPath = Bundle.main.path(forResource: "claude-prompt-server", ofType: nil)
+let serverPath = Bundle.main.path(forResource: "flowgate-server", ofType: nil)
 let process = Process()
 process.executableURL = URL(fileURLWithPath: serverPath!)
 try process.run()

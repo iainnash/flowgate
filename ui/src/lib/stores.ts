@@ -2,44 +2,31 @@ import { writable, get } from 'svelte/store';
 import * as Tone from 'tone';
 import type { Prompt, Settings, WsMessage, ToolCategory, UIPreferences, DevicesResponse } from './types';
 import { DEFAULT_UI_PREFS } from './types';
+import toolCategoryConfig from '../../../go-server/toolcategories/tool-categories.json';
 
-// Complete tool categorization based on Claude Code documentation
-export const TOOL_CATEGORIES = {
-  read: new Set([
-    'Read', 'Glob', 'Grep',
-    'ListMcpResourcesTool', 'ReadMcpResourceTool',
-    'ToolSearch',
-  ]),
-  write: new Set([
-    'Edit', 'Write', 'NotebookEdit',
-  ]),
-  execute: new Set([
-    'Bash', 'KillShell', 'Skill',
-  ]),
-  task: new Set([
-    'Task', 'TaskList', 'TaskGet', 'TaskOutput',
-    'TaskCreate', 'TaskUpdate', 'TaskStop',
-  ]),
-  web: new Set([
-    'WebFetch', 'WebSearch',
-  ]),
-  interactive: new Set([
-    'AskUserQuestion',
-    'ExitPlanMode',
-    'EnterPlanMode',
-  ]),
-} as const;
+type ConfiguredToolCategory = Exclude<ToolCategory, 'mcp' | 'other'>;
+type ToolCategoryConfig = {
+  mcpPrefix: string;
+  categoryOrder: ConfiguredToolCategory[];
+  categories: Record<ConfiguredToolCategory, string[]>;
+};
+
+const typedToolCategoryConfig = toolCategoryConfig as ToolCategoryConfig;
+
+export const TOOL_CATEGORIES = Object.fromEntries(
+  Object.entries(typedToolCategoryConfig.categories).map(([category, tools]) => [
+    category,
+    new Set(tools),
+  ])
+) as Record<ConfiguredToolCategory, Set<string>>;
 
 export type { ToolCategory } from './types';
 
 export function getToolCategory(toolName: string): ToolCategory {
-  if (toolName.startsWith('mcp__')) return 'mcp';
-  if (TOOL_CATEGORIES.read.has(toolName)) return 'read';
-  if (TOOL_CATEGORIES.write.has(toolName)) return 'write';
-  if (TOOL_CATEGORIES.execute.has(toolName)) return 'execute';
-  if (TOOL_CATEGORIES.task.has(toolName)) return 'task';
-  if (TOOL_CATEGORIES.web.has(toolName)) return 'web';
-  if (TOOL_CATEGORIES.interactive.has(toolName)) return 'interactive';
+  if (toolName.startsWith(typedToolCategoryConfig.mcpPrefix)) return 'mcp';
+  for (const category of typedToolCategoryConfig.categoryOrder) {
+    if (TOOL_CATEGORIES[category].has(toolName)) return category;
+  }
   return 'other';
 }
 
@@ -79,11 +66,12 @@ export const settings = writable<Settings>({
 });
 
 // UI preferences stored locally (not sent to server)
-const UI_PREFS_KEY = 'claude-prompt-ui-prefs';
+const UI_PREFS_KEY = 'flowgate-prefs';
+const LEGACY_UI_PREFS_KEY = 'claude-prompt-ui-prefs';
 
 function loadUIPrefs(): UIPreferences {
   try {
-    const stored = localStorage.getItem(UI_PREFS_KEY);
+    const stored = localStorage.getItem(UI_PREFS_KEY) ?? localStorage.getItem(LEGACY_UI_PREFS_KEY);
     if (stored) {
       return { ...DEFAULT_UI_PREFS, ...JSON.parse(stored) };
     }
@@ -116,6 +104,9 @@ const SESSION_COLORS = [
   '#f97316', // orange
 ];
 
+const TOKEN_KEY = 'flowgate-token';
+const LEGACY_TOKEN_KEY = 'claude-prompt-ui-token';
+
 const sessionColorMap = new Map<string, string>();
 
 export function getSessionColor(sessionId: string): string {
@@ -147,7 +138,7 @@ export function connectWebSocket(): void {
   let savedToken = '';
   if (urlToken) {
     // New token from URL - save it (overwrites any old token)
-    localStorage.setItem('claude-prompt-ui-token', urlToken);
+    localStorage.setItem(TOKEN_KEY, urlToken);
     savedToken = urlToken;
 
     // Clean up URL by removing token parameter (optional, keeps URL clean)
@@ -155,7 +146,7 @@ export function connectWebSocket(): void {
     cleanUrl.searchParams.delete('token');
     window.history.replaceState({}, '', cleanUrl.toString());
   } else {
-    savedToken = localStorage.getItem('claude-prompt-ui-token') || '';
+    savedToken = localStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(LEGACY_TOKEN_KEY) ?? '';
   }
 
   const wsUrl = savedToken
@@ -459,7 +450,7 @@ export function getPromptDisplayIndex(promptId: string, allPrompts: Prompt[]): s
 }
 
 // API helpers - all use WebSocket now
-export function resolvePrompt(id: string, decision: { decision: 'allow' | 'deny' | 'ask'; reason?: string; updatedInput?: Record<string, unknown> }): void {
+export function resolvePrompt(id: string, decision: { decision: 'allow' | 'deny' | 'ask' | 'defer'; reason?: string; updatedInput?: Record<string, unknown>; additionalContext?: string }): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     console.error('WebSocket not connected, cannot resolve prompt');
     return;

@@ -18,6 +18,9 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         .blue, .green, .orange, .purple, .pink, .cyan, .yellow, .red
     ]
     private var nextColorIndex = 0
+    private var recentlyResolvedPromptIDs = Set<String>()
+    private var recentlyResolvedPromptOrder: [String] = []
+    var selectedPromptID: String?
 
     var promptCount: Int { prompts.count }
 
@@ -38,7 +41,13 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         }
     }
 
-    var currentPrompt: Prompt? { sortedPrompts.first }
+    var currentPrompt: Prompt? {
+        if let selectedPromptID,
+           let selectedPrompt = prompts.first(where: { $0.id == selectedPromptID }) {
+            return selectedPrompt
+        }
+        return sortedPrompts.first
+    }
 
     init(webSocket: WebSocketClient) {
         self.webSocket = webSocket
@@ -53,8 +62,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
         webSocket.disconnect()
     }
 
-    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil) {
-        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason, updatedInput: updatedInput)
+    func resolvePrompt(_ prompt: Prompt, decision: Decision, reason: String? = nil, updatedInput: [String: Any]? = nil, additionalContext: String? = nil) {
+        webSocket.sendResolve(id: prompt.id, decision: decision, reason: reason, updatedInput: updatedInput, additionalContext: additionalContext)
     }
 
     func acceptCurrent() {
@@ -113,13 +122,14 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
                 sendNotification(for: prompt)
 
             case .promptResolved(let id, _):
+                markPromptResolved(id)
                 removePrompt(id: id)
 
             case .promptUpdated(let updatedPrompt):
                 updatePrompt(updatedPrompt)
 
             case .promptsList(let promptList):
-                prompts = promptList
+                prompts = promptList.filter { !recentlyResolvedPromptIDs.contains($0.id) }
 
             case .settingsUpdated(let serverSettings):
                 settingsManager?.updateServerSettings(serverSettings)
@@ -131,6 +141,8 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
     }
 
     private func addPrompt(_ prompt: Prompt) {
+        guard !recentlyResolvedPromptIDs.contains(prompt.id) else { return }
+
         if !prompts.contains(where: { $0.id == prompt.id }) {
             prompts.insert(prompt, at: 0)
             // Auto-accept timers are handled server-side
@@ -139,11 +151,28 @@ class PromptManager: ObservableObject, WebSocketClientDelegate {
 
     private func removePrompt(id: String) {
         prompts.removeAll { $0.id == id }
+        if selectedPromptID == id {
+            selectedPromptID = sortedPrompts.first?.id
+        }
     }
 
     private func updatePrompt(_ updatedPrompt: Prompt) {
+        guard !recentlyResolvedPromptIDs.contains(updatedPrompt.id) else { return }
+
         if let index = prompts.firstIndex(where: { $0.id == updatedPrompt.id }) {
             prompts[index] = updatedPrompt
+        }
+    }
+
+    private func markPromptResolved(_ id: String) {
+        guard !recentlyResolvedPromptIDs.contains(id) else { return }
+
+        recentlyResolvedPromptIDs.insert(id)
+        recentlyResolvedPromptOrder.append(id)
+
+        while recentlyResolvedPromptOrder.count > 200 {
+            let staleID = recentlyResolvedPromptOrder.removeFirst()
+            recentlyResolvedPromptIDs.remove(staleID)
         }
     }
 

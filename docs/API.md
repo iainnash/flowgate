@@ -31,6 +31,7 @@ Hook endpoint for submitting prompts. Accepts both camelCase and snake_case for 
 - `allow` - Tool execution permitted
 - `deny` - Tool execution blocked
 - `ask` - Return to terminal for user input
+- `defer` - Defer approval in supported non-interactive Claude Code sessions
 
 ### GET /api/health
 
@@ -43,65 +44,56 @@ Health check endpoint. No authentication required.
 }
 ```
 
-### GET /api/settings
-
-Get current server settings.
-
-**Authentication:** Required
-
-**Response:**
-```json
-{
-  "rules": [...],
-  "native": {
-    "showAutoAccept": true,
-    "enableAnimations": true
-  }
-}
-```
-
-### PUT /api/settings
-
-Update server settings.
-
-**Authentication:** Required
-
-**Request:**
-```json
-{
-  "rules": [...],
-  "native": {
-    "showAutoAccept": true,
-    "enableAnimations": true
-  }
-}
-```
-
-### GET /api/devices
-
-Get connected Stream Deck devices.
-
-**Authentication:** Required
-
-**Response:**
-```json
-{
-  "devices": [
-    {
-      "name": "Stream Deck",
-      "connected": true,
-      "deviceModel": "Stream Deck MK.2"
-    }
-  ],
-  "hasConnectedDevice": true
-}
-```
+Settings, prompt resolution, and pause state are handled over WebSocket. The older REST endpoints for `/api/settings`, `/api/prompts`, and `/api/pause` were removed.
 
 ## WebSocket Protocol
 
 ### Connection
 
 Connect to `ws://127.0.0.1:8888/ws?token=<token>`
+
+### Client Messages
+
+#### resolve
+
+Resolve one prompt.
+
+```json
+{
+  "type": "resolve",
+  "id": "prompt-id",
+  "decision": {
+    "decision": "allow"
+  }
+}
+```
+
+#### togglePause
+
+Toggle all auto-accept countdowns.
+
+```json
+{
+  "type": "togglePause"
+}
+```
+
+#### updateSettings
+
+Update server settings.
+
+```json
+{
+  "type": "updateSettings",
+  "settings": {
+    "rules": [],
+    "native": {
+      "showAutoAccept": true,
+      "enableAnimations": true
+    }
+  }
+}
+```
 
 ### Server Messages
 

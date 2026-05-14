@@ -1,4 +1,9 @@
-# Claude Prompt UI - Design Plan
+# Flowgate - Historical Design Plan
+
+This document captures the original design and may mention superseded REST endpoints.
+For the current API, use `docs/API.md`: `/api/prompt` and `/api/health` are HTTP,
+while prompt listing, prompt resolution, settings, and pause actions use WebSocket
+messages.
 
 ## Overview
 
@@ -29,7 +34,7 @@ A web-based approval UI that integrates with Claude Code via hooks, providing vi
 ## Project Structure
 
 ```
-claude-prompt-ui/
+flowgate/
 ├── package.json              # Root package with workspaces
 ├── hooks/
 │   ├── package.json          # Dependencies for hook (minimal)
@@ -63,10 +68,10 @@ claude-prompt-ui/
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/prompt` | POST | Receive prompt request from hook (blocks until resolved) |
-| `/api/prompts` | GET | List active prompts |
-| `/api/prompts/:id/resolve` | POST | Resolve a prompt with decision |
-| `/api/settings` | GET/PUT | Get/update settings |
+| `/api/health` | GET | Health check |
 | `/ws` | WebSocket | Real-time prompt updates to UI |
+
+Prompt listing, prompt resolution, settings updates, and pause actions are WebSocket messages.
 
 ### Prompt Request Format (from hook)
 
@@ -221,7 +226,7 @@ server.listen(PORT, HOST, () => {
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  Claude Prompt UI                          ⚙️ Settings │
+│  Flowgate                                  ⚙️ Settings │
 ├────────────────────────────────────────────────────────┤
 │                                                        │
 │  ┌──────────────────────────────────────────────────┐ │
@@ -251,7 +256,7 @@ server.listen(PORT, HOST, () => {
 
 ```json
 {
-  "name": "claude-prompt-ui-hooks",
+  "name": "flowgate-hooks",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -301,8 +306,8 @@ interface HookOutput {
   };
 }
 
-const SERVER_URL = process.env.CLAUDE_PROMPT_UI_SERVER ?? 'http://localhost:8888';
-const TIMEOUT_MS = parseInt(process.env.CLAUDE_PROMPT_UI_TIMEOUT ?? '120000', 10);
+const SERVER_URL = process.env.FLOWGATE_SERVER ?? 'http://localhost:8888';
+const TIMEOUT_MS = parseInt(process.env.FLOWGATE_TIMEOUT ?? '120000', 10);
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -553,7 +558,7 @@ console.log(`Hook command: npx tsx "${hookPath}"`);
 ### Project Test Structure
 
 ```
-claude-prompt-ui/
+flowgate/
 ├── hooks/
 │   ├── __tests__/
 │   │   └── prompt-hook.test.ts   # Hook logic tests
@@ -637,7 +642,7 @@ describe('prompt-hook', () => {
         cwd: __dirname.replace('__tests__', ''),
         env: {
           ...process.env,
-          CLAUDE_PROMPT_UI_SERVER: `http://127.0.0.1:${serverPort}`,
+          FLOWGATE_SERVER: `http://127.0.0.1:${serverPort}`,
         },
       });
 
@@ -719,7 +724,7 @@ describe('prompt-hook', () => {
       cwd: __dirname.replace('__tests__', ''),
       env: {
         ...process.env,
-        CLAUDE_PROMPT_UI_SERVER: `http://127.0.0.1:${serverPort}`,
+        FLOWGATE_SERVER: `http://127.0.0.1:${serverPort}`,
       },
     });
 
@@ -1040,7 +1045,7 @@ describe('Stores', () => {
 
     it('should persist to localStorage', () => {
       updateSettings({ autoAcceptTimeout: 30 });
-      const stored = JSON.parse(localStorage.getItem('claude-prompt-ui-settings') || '{}');
+      const stored = JSON.parse(localStorage.getItem('flowgate-settings') || '{}');
       expect(stored.autoAcceptTimeout).toBe(30);
     });
   });
