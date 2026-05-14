@@ -87,19 +87,31 @@ RELEASE_NOTES=$(cat <<EOF
 
 On first launch, Flowgate will show setup instructions with the path to the Claude Code hook.
 
-Add to \`~/.config/claude/settings.json\`:
+Add to \`~/.claude/settings.json\`:
 
 \`\`\`json
 {
   "hooks": {
-    "PreToolUse": "/Applications/Flowgate.app/Contents/Resources/prompt-hook"
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Applications/Flowgate.app/Contents/Resources/prompt-hook"
+          }
+        ]
+      }
+    ]
   }
 }
 \`\`\`
 
 ### What's New
 
-See [CHANGES.md](docs/CHANGES.md) for full changelog.
+- Updated keyboard shortcut handling
+- Fixed concurrency issues
+- Renamed all internal files to Flowgate consistently
+- Various bugfixes
 EOF
 )
 
